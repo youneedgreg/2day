@@ -1,63 +1,57 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import Link from "next/link"
-import { useRouter } from "next/navigation"
-import { CheckCircle, PlusCircle, XCircle } from "lucide-react"
+import { useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { CheckCircle, PlusCircle, XCircle } from "lucide-react";
 
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
-import { useSonner } from "sonner"
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Toaster } from "./ui/sonner";
+import { toast } from "sonner"; // Import toast from Sonner
 
 interface Habit {
-  _id: string
-  name: string
-  description?: string
-  type: "build" | "quit"
-  streak: number
-  completedDates: string[]
+  _id: string;
+  name: string;
+  description?: string;
+  type: "build" | "quit";
+  streak: number;
+  completedDates: string[];
 }
 
 interface HabitListProps {
-  habits: Habit[]
+  habits: Habit[];
 }
 
 export function HabitList({ habits }: HabitListProps) {
-  const [isLoading, setIsLoading] = useState<Record<string, boolean>>({})
-  const router = useRouter()
-  const { sonner } = useSonner()
+  const [isLoading, setIsLoading] = useState<Record<string, boolean>>({});
+  const router = useRouter();
 
   const handleToggleHabit = async (habitId: string) => {
-    setIsLoading((prev) => ({ ...prev, [habitId]: true }))
+    setIsLoading((prev) => ({ ...prev, [habitId]: true }));
 
     try {
       const response = await fetch(`/api/habits/${habitId}/toggle`, {
         method: "POST",
-      })
+      });
 
       if (!response.ok) {
-        throw new Error("Failed to toggle habit")
+        throw new Error("Failed to toggle habit");
       }
 
-      sonner({
-        title: "Success!",
-        description: "Your habit has been updated.",
-      })
+      toast.success("Your habit has been updated."); // Using Sonner toast
 
-      router.refresh()
+      router.refresh();
     } catch (error) {
-      sonner({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Something went wrong",
-        variant: "destructive",
-      })
+      toast.error(error instanceof Error ? error.message : "Something went wrong");
     } finally {
-      setIsLoading((prev) => ({ ...prev, [habitId]: false }))
+      setIsLoading((prev) => ({ ...prev, [habitId]: false }));
     }
-  }
+  };
 
   return (
     <div className="space-y-4">
+      <Toaster /> {/* Ensure Toaster is rendered */}
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-bold">Your Habits</h2>
         <Link href="/dashboard/habits">
@@ -70,7 +64,9 @@ export function HabitList({ habits }: HabitListProps) {
       {habits.length === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-6">
-            <p className="mb-2 text-center text-sm text-muted-foreground">You have not created any habits yet.</p>
+            <p className="mb-2 text-center text-sm text-muted-foreground">
+              You have not created any habits yet.
+            </p>
             <Link href="/dashboard/habits">
               <Button variant="secondary" size="sm" className="gap-1">
                 <PlusCircle className="h-4 w-4" />
@@ -102,7 +98,11 @@ export function HabitList({ habits }: HabitListProps) {
                   onClick={() => handleToggleHabit(habit._id)}
                   disabled={isLoading[habit._id]}
                 >
-                  {habit.type === "build" ? <CheckCircle className="h-4 w-4" /> : <XCircle className="h-4 w-4" />}
+                  {habit.type === "build" ? (
+                    <CheckCircle className="h-4 w-4" />
+                  ) : (
+                    <XCircle className="h-4 w-4" />
+                  )}
                   {isLoading[habit._id] ? "Updating..." : habit.type === "build" ? "Mark Complete" : "Mark Avoided"}
                 </Button>
               </CardFooter>
@@ -111,6 +111,5 @@ export function HabitList({ habits }: HabitListProps) {
         </div>
       )}
     </div>
-  )
+  );
 }
-
