@@ -8,7 +8,8 @@ import TodoList from "@/components/todo-list"
 import Reminders from "@/components/reminders"
 import Notes from "@/components/notes"
 import Stats from "@/components/stats"
-import { CalendarCheck2, CheckSquare, Bell, StickyNote, BarChart3, Sparkles, Sun, Moon } from "lucide-react"
+import Image from "next/image"
+import { CalendarCheck2, CheckSquare, Bell, StickyNote, BarChart3, Sun, Moon } from "lucide-react"
 
 export default function Home() {
   const [mounted, setMounted] = useState(false)
@@ -50,7 +51,13 @@ export default function Home() {
             whileHover={{ rotate: 10, scale: 1.1 }}
             transition={{ type: "spring", stiffness: 400, damping: 10 }}
           >
-            <Sparkles className="h-6 w-6 text-primary" />
+            <Image
+              src="/logo.png"
+              alt="2day Logo"
+              width={32}
+              height={32}
+              className="h-8 w-8"
+            />
           </motion.div>
           <h1 className="text-3xl font-bold bg-gradient-to-r from-primary to-purple-500 bg-clip-text text-transparent">
             2day
