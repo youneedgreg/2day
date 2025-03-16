@@ -49,3 +49,11 @@
   }
 }
 
+@layer base {
+  * {
+    @apply border-gray-200; /* Replace with a standard Tailwind border color */
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
