@@ -1,103 +1,154 @@
-import Image from "next/image";
+"use client"
+
+import { useState, useEffect } from "react"
+import { motion, AnimatePresence } from "framer-motion"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import HabitTracker from "@/components/habit-tracker"
+import TodoList from "@/components/todo-list"
+import Reminders from "@/components/reminders"
+import Notes from "@/components/notes"
+import Stats from "@/components/stats"
+import { CalendarCheck2, CheckSquare, Bell, StickyNote, BarChart3, Sparkles, Sun, Moon } from "lucide-react"
 
 export default function Home() {
-  return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm/6 text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-[family-name:var(--font-geist-mono)] font-semibold">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+  const [mounted, setMounted] = useState(false)
+  const [theme, setTheme] = useState<"light" | "dark">("light")
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+  // Prevent hydration errors with localStorage
+  useEffect(() => {
+    setMounted(true)
+    // Check system preference for initial theme
+    if (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches) {
+      setTheme("dark")
+      document.documentElement.classList.add("dark")
+    }
+  }, [])
+
+  const toggleTheme = () => {
+    setTheme(theme === "light" ? "dark" : "light")
+    document.documentElement.classList.toggle("dark")
+  }
+
+  if (!mounted) return null
+
+  return (
+    <motion.main
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.5 }}
+      className="min-h-screen p-4 md:p-8 max-w-7xl mx-auto"
+    >
+      <motion.div
+        className="flex justify-between items-center mb-8"
+        initial={{ y: -20 }}
+        animate={{ y: 0 }}
+        transition={{ type: "spring", stiffness: 300, damping: 20 }}
+      >
+        <div className="flex items-center gap-2">
+          <motion.div
+            whileHover={{ rotate: 10, scale: 1.1 }}
+            transition={{ type: "spring", stiffness: 400, damping: 10 }}
           >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+            <Sparkles className="h-6 w-6 text-primary" />
+          </motion.div>
+          <h1 className="text-3xl font-bold bg-gradient-to-r from-primary to-purple-500 bg-clip-text text-transparent">
+            2day
+          </h1>
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
+        <motion.button
+          whileHover={{ scale: 1.1 }}
+          whileTap={{ scale: 0.95 }}
+          onClick={toggleTheme}
+          className="p-2 rounded-full bg-muted/50"
         >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
-    </div>
-  );
+          {theme === "light" ? <Moon className="h-5 w-5" /> : <Sun className="h-5 w-5" />}
+        </motion.button>
+      </motion.div>
+
+      <Tabs defaultValue="habits" className="w-full">
+        <motion.div initial={{ y: 10, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.1 }}>
+          <TabsList className="grid grid-cols-5 mb-8 p-1 bg-muted/50 rounded-xl">
+            <TabsTrigger value="habits" className="flex items-center gap-2 rounded-lg">
+              <CalendarCheck2 className="h-4 w-4" />
+              <span className="hidden md:inline">Habits</span>
+            </TabsTrigger>
+            <TabsTrigger value="todos" className="flex items-center gap-2 rounded-lg">
+              <CheckSquare className="h-4 w-4" />
+              <span className="hidden md:inline">Todos</span>
+            </TabsTrigger>
+            <TabsTrigger value="reminders" className="flex items-center gap-2 rounded-lg">
+              <Bell className="h-4 w-4" />
+              <span className="hidden md:inline">Reminders</span>
+            </TabsTrigger>
+            <TabsTrigger value="notes" className="flex items-center gap-2 rounded-lg">
+              <StickyNote className="h-4 w-4" />
+              <span className="hidden md:inline">Notes</span>
+            </TabsTrigger>
+            <TabsTrigger value="stats" className="flex items-center gap-2 rounded-lg">
+              <BarChart3 className="h-4 w-4" />
+              <span className="hidden md:inline">Stats</span>
+            </TabsTrigger>
+          </TabsList>
+        </motion.div>
+
+        <AnimatePresence mode="wait">
+          <TabsContent value="habits" asChild>
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              transition={{ duration: 0.2 }}
+            >
+              <HabitTracker />
+            </motion.div>
+          </TabsContent>
+
+          <TabsContent value="todos" asChild>
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              transition={{ duration: 0.2 }}
+            >
+              <TodoList />
+            </motion.div>
+          </TabsContent>
+
+          <TabsContent value="reminders" asChild>
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              transition={{ duration: 0.2 }}
+            >
+              <Reminders />
+            </motion.div>
+          </TabsContent>
+
+          <TabsContent value="notes" asChild>
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              transition={{ duration: 0.2 }}
+            >
+              <Notes />
+            </motion.div>
+          </TabsContent>
+
+          <TabsContent value="stats" asChild>
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              transition={{ duration: 0.2 }}
+            >
+              <Stats />
+            </motion.div>
+          </TabsContent>
+        </AnimatePresence>
+      </Tabs>
+    </motion.main>
+  )
 }
+
