@@ -2,12 +2,13 @@
 
 import { useState, useEffect } from "react"
 import { motion, AnimatePresence } from "framer-motion"
-import { Tabs,TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import HabitTracker from "@/components/habit-tracker"
 import TodoList from "@/components/todo-list"
 import Reminders from "@/components/reminders"
 import Notes from "@/components/notes"
 import Dashboard from "@/components/dashboard"
+import ProductivityLoader, { PageLoader } from "@/components/ui/loader"
 import Image from "next/image"
 import { 
   CalendarCheck2, 
@@ -24,6 +25,8 @@ export default function Home() {
   const [theme, setTheme] = useState("light")
   const [activeTab, setActiveTab] = useState("dashboard")
   const [isMobile, setIsMobile] = useState(true)
+  const [isLoading, setIsLoading] = useState(true)
+  const [contentLoading, setContentLoading] = useState(false)
 
   // Prevent hydration errors with localStorage and handle responsive layout
   useEffect(() => {
@@ -46,8 +49,16 @@ export default function Home() {
     // Add listener for window resize
     window.addEventListener('resize', checkIfMobile)
     
+    // Simulate initial page loading
+    const timer = setTimeout(() => {
+      setIsLoading(false)
+    }, 1500)
+    
     // Cleanup
-    return () => window.removeEventListener('resize', checkIfMobile)
+    return () => {
+      window.removeEventListener('resize', checkIfMobile)
+      clearTimeout(timer)
+    }
   }, [])
 
   const toggleTheme = () => {
@@ -55,7 +66,23 @@ export default function Home() {
     document.documentElement.classList.toggle("dark")
   }
 
+  // Handle tab changes with loading state
+  const handleTabChange = (value: string) => {
+    setContentLoading(true)
+    setActiveTab(value)
+    
+    // Simulate content loading
+    setTimeout(() => {
+      setContentLoading(false)
+    }, 800)
+  }
+
   if (!mounted) return null
+  
+  // Display initial page loader
+  if (isLoading) {
+    return <PageLoader type="neutral" text="Welcome to 2day!" showText={true} />
+  }
 
   // Navigation items shared between mobile and desktop
   const navItems = [
@@ -97,7 +124,7 @@ export default function Home() {
             {navItems.map((item) => (
               <button
                 key={item.value}
-                onClick={() => setActiveTab(item.value)}
+                onClick={() => handleTabChange(item.value)}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-colors ${
                   activeTab === item.value 
                     ? 'bg-primary text-primary-foreground' 
@@ -174,115 +201,126 @@ export default function Home() {
         )}
 
         {/* Mobile Tab Switcher */}
-{isMobile && (
-  <Tabs 
-    value={activeTab} 
-    className="w-full"
-    onValueChange={setActiveTab}
-  >
-    <motion.div 
-      initial={{ y: 10, opacity: 0 }} 
-      animate={{ y: 0, opacity: 1 }} 
-      transition={{ delay: 0.1 }}
-      className="w-full px-1"
-    >
-      <TabsList className="h-full w-full flex justify-between mb-8 bg-muted/50 rounded-xl overflow-hidden">
-        <TabsTrigger 
-          value="dashboard" 
-          className="flex-1 flex items-center justify-center py-3"
-        >
-          <BarChart3 className="h-5 w-5" />
-        </TabsTrigger>
-        <TabsTrigger 
-          value="habits" 
-          className="flex-1 flex items-center justify-center py-3"
-        >
-          <CalendarCheck2 className="h-5 w-5" />
-        </TabsTrigger>
-        <TabsTrigger 
-          value="todos" 
-          className="flex-1 flex items-center justify-center py-3"
-        >
-          <CheckSquare className="h-5 w-5" />
-        </TabsTrigger>
-        <TabsTrigger 
-          value="reminders" 
-          className="flex-1 flex items-center justify-center py-3"
-        >
-          <Bell className="h-5 w-5" />
-        </TabsTrigger>
-        <TabsTrigger 
-          value="notes" 
-          className="flex-1 flex items-center justify-center py-3"
-        >
-          <StickyNote className="h-5 w-5" />
-        </TabsTrigger>
-      </TabsList>
-    </motion.div>
-  </Tabs>
-)}
-        {/* Content Section */}
-        <AnimatePresence mode="wait">
-          {activeTab === "dashboard" && (
-            <motion.div
-              key="dashboard"
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-              transition={{ duration: 0.2 }}
+        {isMobile && (
+          <Tabs 
+            value={activeTab} 
+            className="w-full"
+            onValueChange={handleTabChange}
+          >
+            <motion.div 
+              initial={{ y: 10, opacity: 0 }} 
+              animate={{ y: 0, opacity: 1 }} 
+              transition={{ delay: 0.1 }}
+              className="w-full px-1"
             >
-              <Dashboard />
+              <TabsList className="h-full w-full flex justify-between mb-8 bg-muted/50 rounded-xl overflow-hidden">
+                <TabsTrigger 
+                  value="dashboard" 
+                  className="flex-1 flex items-center justify-center py-3"
+                >
+                  <BarChart3 className="h-5 w-5" />
+                </TabsTrigger>
+                <TabsTrigger 
+                  value="habits" 
+                  className="flex-1 flex items-center justify-center py-3"
+                >
+                  <CalendarCheck2 className="h-5 w-5" />
+                </TabsTrigger>
+                <TabsTrigger 
+                  value="todos" 
+                  className="flex-1 flex items-center justify-center py-3"
+                >
+                  <CheckSquare className="h-5 w-5" />
+                </TabsTrigger>
+                <TabsTrigger 
+                  value="reminders" 
+                  className="flex-1 flex items-center justify-center py-3"
+                >
+                  <Bell className="h-5 w-5" />
+                </TabsTrigger>
+                <TabsTrigger 
+                  value="notes" 
+                  className="flex-1 flex items-center justify-center py-3"
+                >
+                  <StickyNote className="h-5 w-5" />
+                </TabsTrigger>
+              </TabsList>
             </motion.div>
-          )}
-          
-          {activeTab === "habits" && (
-            <motion.div
-              key="habits"
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-              transition={{ duration: 0.2 }}
-            >
-              <HabitTracker />
-            </motion.div>
-          )}
+          </Tabs>
+        )}
 
-          {activeTab === "todos" && (
-            <motion.div
-              key="todos"
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-              transition={{ duration: 0.2 }}
-            >
-              <TodoList />
-            </motion.div>
-          )}
+        {/* Content Section with Loading States */}
+        {contentLoading ? (
+          <div className="flex justify-center items-center py-20">
+            {activeTab === "dashboard" && <ProductivityLoader type="neutral" size="large" showText text="Loading dashboard..." />}
+            {activeTab === "habits" && <ProductivityLoader type="habit" habitType="build" size="large" showText text="Loading habits..." />}
+            {activeTab === "todos" && <ProductivityLoader type="todo" size="large" showText text="Loading todos..." />}
+            {activeTab === "reminders" && <ProductivityLoader type="reminder" size="large" showText text="Loading reminders..." />}
+            {activeTab === "notes" && <ProductivityLoader type="neutral" size="large" showText text="Loading notes..." />}
+          </div>
+        ) : (
+          <AnimatePresence mode="wait">
+            {activeTab === "dashboard" && (
+              <motion.div
+                key="dashboard"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -20 }}
+                transition={{ duration: 0.2 }}
+              >
+                <Dashboard />
+              </motion.div>
+            )}
+            
+            {activeTab === "habits" && (
+              <motion.div
+                key="habits"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -20 }}
+                transition={{ duration: 0.2 }}
+              >
+                <HabitTracker />
+              </motion.div>
+            )}
 
-          {activeTab === "reminders" && (
-            <motion.div
-              key="reminders"
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-              transition={{ duration: 0.2 }}
-            >
-              <Reminders />
-            </motion.div>
-          )}
+            {activeTab === "todos" && (
+              <motion.div
+                key="todos"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -20 }}
+                transition={{ duration: 0.2 }}
+              >
+                <TodoList />
+              </motion.div>
+            )}
 
-          {activeTab === "notes" && (
-            <motion.div
-              key="notes"
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-              transition={{ duration: 0.2 }}
-            >
-              <Notes />
-            </motion.div>
-          )}
-        </AnimatePresence>
+            {activeTab === "reminders" && (
+              <motion.div
+                key="reminders"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -20 }}
+                transition={{ duration: 0.2 }}
+              >
+                <Reminders />
+              </motion.div>
+            )}
+
+            {activeTab === "notes" && (
+              <motion.div
+                key="notes"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -20 }}
+                transition={{ duration: 0.2 }}
+              >
+                <Notes />
+              </motion.div>
+            )}
+          </AnimatePresence>
+        )}
       </motion.main>
     </div>
   )
