@@ -162,12 +162,12 @@ export default function Home() {
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ duration: 0.5 }}
-        className="flex-1 p-4 md:p-8 max-w-7xl mx-auto"
+        className="flex-1 p-0 md:p-8 max-w-7xl mx-auto w-full"
       >
         {/* Mobile Header */}
         {isMobile && (
           <motion.div
-            className="flex justify-between items-center mb-8"
+            className="flex justify-between items-center px-3 py-4"
             initial={{ y: -20 }}
             animate={{ y: 0 }}
             transition={{ type: "spring", stiffness: 300, damping: 20 }}
@@ -211,9 +211,9 @@ export default function Home() {
               initial={{ y: 10, opacity: 0 }} 
               animate={{ y: 0, opacity: 1 }} 
               transition={{ delay: 0.1 }}
-              className="w-full px-1"
+              className="w-full px-0"
             >
-              <TabsList className="h-full w-full flex justify-between mb-8 bg-muted/50 rounded-xl overflow-hidden">
+              <TabsList className="h-full w-full flex justify-between mb-4 bg-muted/50 rounded-none">
                 <TabsTrigger 
                   value="dashboard" 
                   className="flex-1 flex items-center justify-center py-3"
@@ -260,65 +260,67 @@ export default function Home() {
           </div>
         ) : (
           <AnimatePresence mode="wait">
-            {activeTab === "dashboard" && (
-              <motion.div
-                key="dashboard"
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -20 }}
-                transition={{ duration: 0.2 }}
-              >
-                <Dashboard />
-              </motion.div>
-            )}
-            
-            {activeTab === "habits" && (
-              <motion.div
-                key="habits"
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -20 }}
-                transition={{ duration: 0.2 }}
-              >
-                <HabitTracker />
-              </motion.div>
-            )}
+            <div className="px-0">
+              {activeTab === "dashboard" && (
+                <motion.div
+                  key="dashboard"
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -20 }}
+                  transition={{ duration: 0.2 }}
+                >
+                  <Dashboard />
+                </motion.div>
+              )}
+              
+              {activeTab === "habits" && (
+                <motion.div
+                  key="habits"
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -20 }}
+                  transition={{ duration: 0.2 }}
+                >
+                  <HabitTracker />
+                </motion.div>
+              )}
 
-            {activeTab === "todos" && (
-              <motion.div
-                key="todos"
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -20 }}
-                transition={{ duration: 0.2 }}
-              >
-                <TodoList />
-              </motion.div>
-            )}
+              {activeTab === "todos" && (
+                <motion.div
+                  key="todos"
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -20 }}
+                  transition={{ duration: 0.2 }}
+                >
+                  <TodoList />
+                </motion.div>
+              )}
 
-            {activeTab === "reminders" && (
-              <motion.div
-                key="reminders"
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -20 }}
-                transition={{ duration: 0.2 }}
-              >
-                <Reminders />
-              </motion.div>
-            )}
+              {activeTab === "reminders" && (
+                <motion.div
+                  key="reminders"
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -20 }}
+                  transition={{ duration: 0.2 }}
+                >
+                  <Reminders />
+                </motion.div>
+              )}
 
-            {activeTab === "notes" && (
-              <motion.div
-                key="notes"
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -20 }}
-                transition={{ duration: 0.2 }}
-              >
-                <Notes />
-              </motion.div>
-            )}
+              {activeTab === "notes" && (
+                <motion.div
+                  key="notes"
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -20 }}
+                  transition={{ duration: 0.2 }}
+                >
+                  <Notes />
+                </motion.div>
+              )}
+            </div>
           </AnimatePresence>
         )}
       </motion.main>

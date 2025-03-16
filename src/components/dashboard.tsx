@@ -46,12 +46,12 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 px-2 md:px-0">
       <motion.div
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.3 }}
-        className="flex justify-between items-center"
+        className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 sm:gap-0"
       >
         <h2 className="text-2xl font-bold">Your Progress</h2>
         <Tabs defaultValue="daily">
@@ -69,20 +69,21 @@ export default function Dashboard() {
         </Tabs>
       </motion.div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* Mobile-optimized grid layout for stat cards */}
+      <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-4 gap-3">
         <motion.div custom={0} initial="hidden" animate="visible" variants={cardVariants}>
           <Card className="overflow-hidden border-t-4 border-t-blue-500">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium flex items-center gap-2">
-                <Target className="h-4 w-4 text-blue-500" />
-                Habit Completion
+            <CardHeader className="pb-1 px-3 py-1">
+              <CardTitle className="text-xs sm:text-sm font-medium flex items-center gap-1">
+                <Target className="h-3 w-3 sm:h-4 sm:w-4 text-blue-500" />
+                Habits
               </CardTitle>
             </CardHeader>
-            <CardContent>
-              <div className="flex flex-col items-center justify-center h-24">
-                <div className="text-3xl font-bold">{habitCompletionRate}%</div>
-                <p className="text-xs text-muted-foreground mt-1">
-                  {completedHabits} of {totalHabits} habits completed today
+            <CardContent className="px-3 pb-2 pt-0">
+              <div className="flex flex-col items-center justify-center h-10 sm:h-14 md:h-24">
+                <div className="text-xl sm:text-2xl md:text-3xl font-bold">{habitCompletionRate}%</div>
+                <p className="text-xs text-muted-foreground mt-1 text-center">
+                  {completedHabits}/{totalHabits} done
                 </p>
               </div>
             </CardContent>
@@ -91,17 +92,17 @@ export default function Dashboard() {
 
         <motion.div custom={1} initial="hidden" animate="visible" variants={cardVariants}>
           <Card className="overflow-hidden border-t-4 border-t-green-500">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium flex items-center gap-2">
-                <CheckSquare className="h-4 w-4 text-green-500" />
-                Task Completion
+            <CardHeader className="pb-1 px-3 py-1">
+              <CardTitle className="text-xs sm:text-sm font-medium flex items-center gap-1">
+                <CheckSquare className="h-3 w-3 sm:h-4 sm:w-4 text-green-500" />
+                Tasks
               </CardTitle>
             </CardHeader>
-            <CardContent>
-              <div className="flex flex-col items-center justify-center h-24">
-                <div className="text-3xl font-bold">{todoCompletionRate}%</div>
-                <p className="text-xs text-muted-foreground mt-1">
-                  {completedTodos} of {totalTodos} tasks completed
+            <CardContent className="px-3 pb-2 pt-0">
+              <div className="flex flex-col items-center justify-center h-10 sm:h-14 md:h-24">
+                <div className="text-xl sm:text-2xl md:text-3xl font-bold">{todoCompletionRate}%</div>
+                <p className="text-xs text-muted-foreground mt-1 text-center">
+                  {completedTodos}/{totalTodos} done
                 </p>
               </div>
             </CardContent>
@@ -110,18 +111,18 @@ export default function Dashboard() {
 
         <motion.div custom={2} initial="hidden" animate="visible" variants={cardVariants}>
           <Card className="overflow-hidden border-t-4 border-t-purple-500">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium flex items-center gap-2">
-                <Zap className="h-4 w-4 text-purple-500" />
-                Longest Streak
+            <CardHeader className="pb-1 px-3 py-1">
+              <CardTitle className="text-xs sm:text-sm font-medium flex items-center gap-1">
+                <Zap className="h-3 w-3 sm:h-4 sm:w-4 text-purple-500" />
+                Streak
               </CardTitle>
             </CardHeader>
-            <CardContent>
-              <div className="flex flex-col items-center justify-center h-24">
-                <div className="text-3xl font-bold">
+            <CardContent className="px-3 pb-2 pt-0">
+              <div className="flex flex-col items-center justify-center h-10 sm:h-14 md:h-24">
+                <div className="text-xl sm:text-2xl md:text-3xl font-bold">
                   {habits.length > 0 ? Math.max(...habits.map((habit) => habit.streak)) : 0}
                 </div>
-                <p className="text-xs text-muted-foreground mt-1">days in a row</p>
+                <p className="text-xs text-muted-foreground mt-1 text-center">days</p>
               </div>
             </CardContent>
           </Card>
@@ -129,39 +130,37 @@ export default function Dashboard() {
 
         <motion.div custom={3} initial="hidden" animate="visible" variants={cardVariants}>
           <Card className="overflow-hidden border-t-4 border-t-amber-500">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium flex items-center gap-2">
-                <Bell className="h-4 w-4 text-amber-500" />
-                Upcoming Reminders
+            <CardHeader className="pb-1 px-3 py-1">
+              <CardTitle className="text-xs sm:text-sm font-medium flex items-center gap-1">
+                <Bell className="h-3 w-3 sm:h-4 sm:w-4 text-amber-500" />
+                Reminders
               </CardTitle>
             </CardHeader>
-            <CardContent>
-              <div className="flex flex-col items-center justify-center h-24">
-                <div className="text-3xl font-bold">{reminders.filter((r) => !r.completed).length}</div>
-                <p className="text-xs text-muted-foreground mt-1">pending reminders</p>
+            <CardContent className="px-3 pb-2 pt-0">
+              <div className="flex flex-col items-center justify-center h-10 sm:h-14 md:h-24">
+                <div className="text-xl sm:text-2xl md:text-3xl font-bold">{reminders.filter((r) => !r.completed).length}</div>
+                <p className="text-xs text-muted-foreground mt-1 text-center">pending</p>
               </div>
             </CardContent>
           </Card>
         </motion.div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+      {/* Charts section - stack on mobile, side by side on larger screens */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
         <motion.div custom={4} initial="hidden" animate="visible" variants={cardVariants}>
           <Card>
-            <CardHeader>
-              <CardTitle className="text-lg font-medium flex items-center gap-2">
-                <BarChart className="h-5 w-5 text-primary" />
+            <CardHeader className="pb-2 px-4 py-3">
+              <CardTitle className="text-base sm:text-lg font-medium flex items-center gap-2">
+                <BarChart className="h-4 w-4 sm:h-5 sm:w-5 text-primary" />
                 Habit Completion
               </CardTitle>
             </CardHeader>
-            <CardContent>
-              <div className="aspect-[4/3] bg-muted/30 rounded-md flex flex-col items-center justify-center p-6">
-                <TrendingUp className="h-12 w-12 text-muted-foreground/40 mb-4" />
-                <p className="text-muted-foreground text-center">
-                  Your habit data will appear here as you build consistency
-                </p>
-                <p className="text-xs text-muted-foreground/70 mt-2 text-center">
-                  Complete habits daily to see your progress charts
+            <CardContent className="px-4 py-3">
+              <div className="aspect-square sm:aspect-[4/3] bg-muted/30 rounded-md flex flex-col items-center justify-center p-4 sm:p-6">
+                <TrendingUp className="h-8 w-8 sm:h-12 sm:w-12 text-muted-foreground/40 mb-3" />
+                <p className="text-sm text-muted-foreground text-center">
+                  Your habit data will appear here
                 </p>
               </div>
             </CardContent>
@@ -170,18 +169,17 @@ export default function Dashboard() {
 
         <motion.div custom={5} initial="hidden" animate="visible" variants={cardVariants}>
           <Card>
-            <CardHeader>
-              <CardTitle className="text-lg font-medium flex items-center gap-2">
-                <PieChart className="h-5 w-5 text-primary" />
+            <CardHeader className="pb-2 px-4 py-3">
+              <CardTitle className="text-base sm:text-lg font-medium flex items-center gap-2">
+                <PieChart className="h-4 w-4 sm:h-5 sm:w-5 text-primary" />
                 Task Distribution
               </CardTitle>
             </CardHeader>
-            <CardContent>
-              <div className="aspect-[4/3] bg-muted/30 rounded-md flex flex-col items-center justify-center p-6">
-                <Award className="h-12 w-12 text-muted-foreground/40 mb-4" />
-                <p className="text-muted-foreground text-center">Your task completion data will appear here</p>
-                <p className="text-xs text-muted-foreground/70 mt-2 text-center">
-                  Complete more tasks to unlock insights about your productivity
+            <CardContent className="px-4 py-3">
+              <div className="aspect-square sm:aspect-[4/3] bg-muted/30 rounded-md flex flex-col items-center justify-center p-4 sm:p-6">
+                <Award className="h-8 w-8 sm:h-12 sm:w-12 text-muted-foreground/40 mb-3" />
+                <p className="text-sm text-muted-foreground text-center">
+                  Your task data will appear here
                 </p>
               </div>
             </CardContent>
@@ -191,4 +189,3 @@ export default function Dashboard() {
     </div>
   )
 }
-
