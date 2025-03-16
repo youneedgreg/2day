@@ -92,6 +92,16 @@ export default function Home() {
         </motion.div>
 
         <AnimatePresence mode="wait">
+        <TabsContent value="stats" asChild>
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              transition={{ duration: 0.2 }}
+            >
+              <Stats />
+            </motion.div>
+          </TabsContent>
           <TabsContent value="habits" asChild>
             <motion.div
               initial={{ opacity: 0, y: 20 }}
@@ -136,16 +146,6 @@ export default function Home() {
             </motion.div>
           </TabsContent>
 
-          <TabsContent value="stats" asChild>
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-              transition={{ duration: 0.2 }}
-            >
-              <Stats />
-            </motion.div>
-          </TabsContent>
         </AnimatePresence>
       </Tabs>
     </motion.main>
