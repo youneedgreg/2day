@@ -12,7 +12,8 @@ import { CalendarCheck2, CheckSquare, Bell, StickyNote, BarChart3, Sparkles, Sun
 
 export default function Home() {
   const [mounted, setMounted] = useState(false)
-  const [theme, setTheme] = useState<"light" | "dark">("light")
+  const [theme, setTheme] = useState("light")
+  const [activeTab, setActiveTab] = useState("habits")
 
   // Prevent hydration errors with localStorage
   useEffect(() => {
@@ -65,7 +66,11 @@ export default function Home() {
         </motion.button>
       </motion.div>
 
-      <Tabs defaultValue="habits" className="w-full">
+      <Tabs 
+        defaultValue="habits" 
+        className="w-full"
+        onValueChange={setActiveTab}
+      >
         <motion.div initial={{ y: 10, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.1 }}>
           <TabsList className="grid grid-cols-5 mb-8 p-1 bg-muted/50 rounded-xl">
             <TabsTrigger value="habits" className="flex items-center gap-2 rounded-lg">
@@ -92,63 +97,72 @@ export default function Home() {
         </motion.div>
 
         <AnimatePresence mode="wait">
-        <TabsContent value="stats" asChild>
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-              transition={{ duration: 0.2 }}
-            >
-              <Stats />
-            </motion.div>
-          </TabsContent>
-          <TabsContent value="habits" asChild>
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-              transition={{ duration: 0.2 }}
-            >
-              <HabitTracker />
-            </motion.div>
-          </TabsContent>
+          {activeTab === "stats" && (
+            <TabsContent key="stats" value="stats" asChild>
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -20 }}
+                transition={{ duration: 0.2 }}
+              >
+                <Stats />
+              </motion.div>
+            </TabsContent>
+          )}
+          
+          {activeTab === "habits" && (
+            <TabsContent key="habits" value="habits" asChild>
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -20 }}
+                transition={{ duration: 0.2 }}
+              >
+                <HabitTracker />
+              </motion.div>
+            </TabsContent>
+          )}
 
-          <TabsContent value="todos" asChild>
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-              transition={{ duration: 0.2 }}
-            >
-              <TodoList />
-            </motion.div>
-          </TabsContent>
+          {activeTab === "todos" && (
+            <TabsContent key="todos" value="todos" asChild>
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -20 }}
+                transition={{ duration: 0.2 }}
+              >
+                <TodoList />
+              </motion.div>
+            </TabsContent>
+          )}
 
-          <TabsContent value="reminders" asChild>
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-              transition={{ duration: 0.2 }}
-            >
-              <Reminders />
-            </motion.div>
-          </TabsContent>
+          {activeTab === "reminders" && (
+            <TabsContent key="reminders" value="reminders" asChild>
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -20 }}
+                transition={{ duration: 0.2 }}
+              >
+                <Reminders />
+              </motion.div>
+            </TabsContent>
+          )}
 
-          <TabsContent value="notes" asChild>
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-              transition={{ duration: 0.2 }}
-            >
-              <Notes />
-            </motion.div>
-          </TabsContent>
-
+          {activeTab === "notes" && (
+            <TabsContent key="notes" value="notes" asChild>
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -20 }}
+                transition={{ duration: 0.2 }}
+              >
+                <Notes />
+              </motion.div>
+            </TabsContent>
+          )}
         </AnimatePresence>
       </Tabs>
     </motion.main>
   )
 }
-
