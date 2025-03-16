@@ -7,7 +7,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { BarChart, PieChart, TrendingUp, Award, Target, Zap, CheckSquare, Bell } from "lucide-react"
 import { getHabits, getTodos, getReminders, Habit, Todo, Reminder } from "@/lib/storage"
 
-export default function Stats() {
+export default function Dashboard() {
   const [habits, setHabits] = useState<Habit[]>([])
   const [todos, setTodos] = useState<Todo[]>([])
   const [reminders, setReminders] = useState<Reminder[]>([])

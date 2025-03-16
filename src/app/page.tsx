@@ -7,7 +7,7 @@ import HabitTracker from "@/components/habit-tracker"
 import TodoList from "@/components/todo-list"
 import Reminders from "@/components/reminders"
 import Notes from "@/components/notes"
-import Stats from "@/components/stats"
+import Dashboard from "@/components/dashboard"
 import Image from "next/image"
 import { 
   CalendarCheck2, 
@@ -22,7 +22,7 @@ import {
 export default function Home() {
   const [mounted, setMounted] = useState(false)
   const [theme, setTheme] = useState("light")
-  const [activeTab, setActiveTab] = useState("stats")
+  const [activeTab, setActiveTab] = useState("dashboard")
   const [isMobile, setIsMobile] = useState(true)
 
   // Prevent hydration errors with localStorage and handle responsive layout
@@ -59,7 +59,7 @@ export default function Home() {
 
   // Navigation items shared between mobile and desktop
   const navItems = [
-    { value: "stats", label: "Stats", icon: <BarChart3 className="h-5 w-5" /> },
+    { value: "dashboard", label: "Dashboard", icon: <BarChart3 className="h-5 w-5" /> },
     { value: "habits", label: "Habits", icon: <CalendarCheck2 className="h-5 w-5" /> },
     { value: "todos", label: "Todos", icon: <CheckSquare className="h-5 w-5" /> },
     { value: "reminders", label: "Reminders", icon: <Bell className="h-5 w-5" /> },
@@ -188,7 +188,7 @@ export default function Home() {
     >
       <TabsList className="h-full w-full flex justify-between mb-8 bg-muted/50 rounded-xl overflow-hidden">
         <TabsTrigger 
-          value="stats" 
+          value="dashboard" 
           className="flex-1 flex items-center justify-center py-3"
         >
           <BarChart3 className="h-5 w-5" />
@@ -223,15 +223,15 @@ export default function Home() {
 )}
         {/* Content Section */}
         <AnimatePresence mode="wait">
-          {activeTab === "stats" && (
+          {activeTab === "dashboard" && (
             <motion.div
-              key="stats"
+              key="dashboard"
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -20 }}
               transition={{ duration: 0.2 }}
             >
-              <Stats />
+              <Dashboard />
             </motion.div>
           )}
           
