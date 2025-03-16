@@ -5,12 +5,12 @@ import { motion } from "framer-motion"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { BarChart, PieChart, TrendingUp, Award, Target, Zap, CheckSquare, Bell } from "lucide-react"
-import { getHabits, getTodos, getReminders } from "@/lib/storage"
+import { getHabits, getTodos, getReminders, Habit, Todo, Reminder } from "@/lib/storage"
 
 export default function Stats() {
-  const [habits, setHabits] = useState([])
-  const [todos, setTodos] = useState([])
-  const [reminders, setReminders] = useState([])
+  const [habits, setHabits] = useState<Habit[]>([])
+  const [todos, setTodos] = useState<Todo[]>([])
+  const [reminders, setReminders] = useState<Reminder[]>([])
   const [mounted, setMounted] = useState(false)
 
   useEffect(() => {
@@ -34,7 +34,7 @@ export default function Stats() {
 
   const cardVariants = {
     hidden: { opacity: 0, y: 20 },
-    visible: (i) => ({
+    visible: (i: number) => ({
       opacity: 1,
       y: 0,
       transition: {
