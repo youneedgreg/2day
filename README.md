@@ -128,4 +128,17 @@ All data is stored in your browser's localStorage, meaning:
 
 ---
 
-Made with ❤️ for productivity enthusiasts
+Made with ❤️ for productivity enthusiasts\
+
+
+
+## implement
+collaboration
+auth
+vision board
+goals
+inspiration
+grow your virtual tree
+voice memos
+attachment on notes
+ai intergration
