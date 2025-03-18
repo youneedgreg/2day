@@ -133,6 +133,23 @@ Made with ❤️ for productivity enthusiasts\
 
 
 ## implement
+dashboard pick components
+navbar
+storage
+habit tracker calender 
+todos, reminders tabs for all, upcomming and today
+to do priorities and stuff
+to-do ident
+to do commands
+to do timer
+to do due date
+note formatting
+to do notes
+to -do view...inspo from today
+to do spaces
+intro to app
+
+
 collaboration
 auth
 vision board
