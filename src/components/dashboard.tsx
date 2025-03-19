@@ -4,21 +4,83 @@ import { useState, useEffect } from "react"
 import { motion } from "framer-motion"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { BarChart, PieChart, TrendingUp, Award, Target, Zap, CheckSquare, Bell } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Switch } from "@/components/ui/switch"
+import { 
+  BarChart, PieChart, TrendingUp, Award, Target, Zap, CheckSquare, Bell, 
+  Plus, Edit, Trash2, Move, Settings, Save 
+} from "lucide-react"
 import { getHabits, getTodos, getReminders, Habit, Todo, Reminder } from "@/lib/storage"
+
+// Card configuration types
+export type CardType = 'habits' | 'tasks' | 'streak' | 'reminders' | 'habitChart' | 'taskChart'
+export type CardConfig = {
+  id: string;
+  type: CardType;
+  title: string;
+  icon: string;
+  enabled: boolean;
+  position: number;
+  size: 'small' | 'medium' | 'large';
+}
+
+const defaultCards: CardConfig[] = [
+  { id: 'habits', type: 'habits', title: 'Habits', icon: 'Target', enabled: true, position: 0, size: 'small' },
+  { id: 'tasks', type: 'tasks', title: 'Tasks', icon: 'CheckSquare', enabled: true, position: 1, size: 'small' },
+  { id: 'streak', type: 'streak', title: 'Streak', icon: 'Zap', enabled: true, position: 2, size: 'small' },
+  { id: 'reminders', type: 'reminders', title: 'Reminders', icon: 'Bell', enabled: true, position: 3, size: 'small' },
+  { id: 'habitChart', type: 'habitChart', title: 'Habit Completion', icon: 'BarChart', enabled: true, position: 4, size: 'medium' },
+  { id: 'taskChart', type: 'taskChart', title: 'Task Distribution', icon: 'PieChart', enabled: true, position: 5, size: 'medium' },
+]
+
+// Map icon strings to components
+const iconMap = {
+  Target: Target,
+  CheckSquare: CheckSquare,
+  Zap: Zap,
+  Bell: Bell,
+  BarChart: BarChart,
+  PieChart: PieChart,
+  TrendingUp: TrendingUp,
+  Award: Award,
+}
 
 export default function Dashboard() {
   const [habits, setHabits] = useState<Habit[]>([])
   const [todos, setTodos] = useState<Todo[]>([])
   const [reminders, setReminders] = useState<Reminder[]>([])
   const [mounted, setMounted] = useState(false)
+  const [cards, setCards] = useState<CardConfig[]>([])
+  const [editingCard, setEditingCard] = useState<CardConfig | null>(null)
+  const [isEditMode, setIsEditMode] = useState(false)
+  const [timeframe, setTimeframe] = useState('daily')
+  const [isConfigOpen, setIsConfigOpen] = useState(false)
 
   useEffect(() => {
     setMounted(true)
     setHabits(getHabits())
     setTodos(getTodos())
     setReminders(getReminders())
+    
+    // Load saved card configuration or use defaults
+    const savedCards = localStorage.getItem('dashboardCards')
+    if (savedCards) {
+      setCards(JSON.parse(savedCards))
+    } else {
+      setCards(defaultCards)
+    }
   }, [])
+
+  // Save card configuration when it changes
+  useEffect(() => {
+    if (cards.length > 0 && mounted) {
+      localStorage.setItem('dashboardCards', JSON.stringify(cards))
+    }
+  }, [cards, mounted])
 
   if (!mounted) return null
 
@@ -45,38 +107,84 @@ export default function Dashboard() {
     }),
   }
 
-  return (
-    <div className="space-y-6 px-2 md:px-0">
-      <motion.div
-        initial={{ opacity: 0, y: -10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.3 }}
-        className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 sm:gap-0"
-      >
-        <h2 className="text-2xl font-bold">Your Progress</h2>
-        <Tabs defaultValue="daily">
-          <TabsList className="bg-muted/50">
-            <TabsTrigger value="daily" className="text-xs">
-              Daily
-            </TabsTrigger>
-            <TabsTrigger value="weekly" className="text-xs">
-              Weekly
-            </TabsTrigger>
-            <TabsTrigger value="monthly" className="text-xs">
-              Monthly
-            </TabsTrigger>
-          </TabsList>
-        </Tabs>
-      </motion.div>
+  // Save current card configuration
+  const saveCardConfig = () => {
+    localStorage.setItem('dashboardCards', JSON.stringify(cards))
+    setIsEditMode(false)
+  }
 
-      {/* Mobile-optimized grid layout for stat cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-4 gap-3">
-        <motion.div custom={0} initial="hidden" animate="visible" variants={cardVariants}>
+  // Reset to default configuration
+  const resetToDefaults = () => {
+    setCards(defaultCards)
+    localStorage.setItem('dashboardCards', JSON.stringify(defaultCards))
+  }
+
+  // Add a new card
+  const addCard = () => {
+    const newId = `card-${Date.now()}`
+    const newCard: CardConfig = {
+      id: newId,
+      type: 'habits',
+      title: 'New Card',
+      icon: 'Target',
+      enabled: true,
+      position: cards.length,
+      size: 'small',
+    }
+    setCards([...cards, newCard])
+    setEditingCard(newCard)
+    setIsConfigOpen(true)
+  }
+
+  // Update a card's configuration
+  const updateCard = (updatedCard: CardConfig) => {
+    setCards(cards.map(card => card.id === updatedCard.id ? updatedCard : card))
+    setEditingCard(null)
+    setIsConfigOpen(false)
+  }
+
+  // Delete a card
+  const deleteCard = (id: string) => {
+    setCards(cards.filter(card => card.id !== id).map((card, index) => ({
+      ...card,
+      position: index
+    })))
+  }
+
+  // Move card up in order
+  const moveCardUp = (index: number) => {
+    if (index <= 0) return
+    const newCards = [...cards]
+    const temp = newCards[index - 1].position
+    newCards[index - 1].position = newCards[index].position
+    newCards[index].position = temp
+    // Sort by position
+    setCards(newCards.sort((a, b) => a.position - b.position))
+  }
+
+  // Move card down in order
+  const moveCardDown = (index: number) => {
+    if (index >= cards.length - 1) return
+    const newCards = [...cards]
+    const temp = newCards[index + 1].position
+    newCards[index + 1].position = newCards[index].position
+    newCards[index].position = temp
+    // Sort by position
+    setCards(newCards.sort((a, b) => a.position - b.position))
+  }
+
+  // Render the card based on its type
+  const renderCardContent = (card: CardConfig) => {
+    const IconComponent = iconMap[card.icon as keyof typeof iconMap] || Target
+
+    switch (card.type) {
+      case 'habits':
+        return (
           <Card className="overflow-hidden border-t-4 border-t-blue-500">
             <CardHeader className="pb-1 px-3 py-1">
               <CardTitle className="text-xs sm:text-sm font-medium flex items-center gap-1">
-                <Target className="h-3 w-3 sm:h-4 sm:w-4 text-blue-500" />
-                Habits
+                <IconComponent className="h-3 w-3 sm:h-4 sm:w-4 text-blue-500" />
+                {card.title}
               </CardTitle>
             </CardHeader>
             <CardContent className="px-3 pb-2 pt-0">
@@ -88,14 +196,15 @@ export default function Dashboard() {
               </div>
             </CardContent>
           </Card>
-        </motion.div>
-
-        <motion.div custom={1} initial="hidden" animate="visible" variants={cardVariants}>
+        )
+      
+      case 'tasks':
+        return (
           <Card className="overflow-hidden border-t-4 border-t-green-500">
             <CardHeader className="pb-1 px-3 py-1">
               <CardTitle className="text-xs sm:text-sm font-medium flex items-center gap-1">
-                <CheckSquare className="h-3 w-3 sm:h-4 sm:w-4 text-green-500" />
-                Tasks
+                <IconComponent className="h-3 w-3 sm:h-4 sm:w-4 text-green-500" />
+                {card.title}
               </CardTitle>
             </CardHeader>
             <CardContent className="px-3 pb-2 pt-0">
@@ -107,14 +216,15 @@ export default function Dashboard() {
               </div>
             </CardContent>
           </Card>
-        </motion.div>
-
-        <motion.div custom={2} initial="hidden" animate="visible" variants={cardVariants}>
+        )
+        
+      case 'streak':
+        return (
           <Card className="overflow-hidden border-t-4 border-t-purple-500">
             <CardHeader className="pb-1 px-3 py-1">
               <CardTitle className="text-xs sm:text-sm font-medium flex items-center gap-1">
-                <Zap className="h-3 w-3 sm:h-4 sm:w-4 text-purple-500" />
-                Streak
+                <IconComponent className="h-3 w-3 sm:h-4 sm:w-4 text-purple-500" />
+                {card.title}
               </CardTitle>
             </CardHeader>
             <CardContent className="px-3 pb-2 pt-0">
@@ -126,14 +236,15 @@ export default function Dashboard() {
               </div>
             </CardContent>
           </Card>
-        </motion.div>
-
-        <motion.div custom={3} initial="hidden" animate="visible" variants={cardVariants}>
+        )
+        
+      case 'reminders':
+        return (
           <Card className="overflow-hidden border-t-4 border-t-amber-500">
             <CardHeader className="pb-1 px-3 py-1">
               <CardTitle className="text-xs sm:text-sm font-medium flex items-center gap-1">
-                <Bell className="h-3 w-3 sm:h-4 sm:w-4 text-amber-500" />
-                Reminders
+                <IconComponent className="h-3 w-3 sm:h-4 sm:w-4 text-amber-500" />
+                {card.title}
               </CardTitle>
             </CardHeader>
             <CardContent className="px-3 pb-2 pt-0">
@@ -143,17 +254,15 @@ export default function Dashboard() {
               </div>
             </CardContent>
           </Card>
-        </motion.div>
-      </div>
-
-      {/* Charts section - stack on mobile, side by side on larger screens */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
-        <motion.div custom={4} initial="hidden" animate="visible" variants={cardVariants}>
+        )
+        
+      case 'habitChart':
+        return (
           <Card>
             <CardHeader className="pb-2 px-4 py-3">
               <CardTitle className="text-base sm:text-lg font-medium flex items-center gap-2">
-                <BarChart className="h-4 w-4 sm:h-5 sm:w-5 text-primary" />
-                Habit Completion
+                <IconComponent className="h-4 w-4 sm:h-5 sm:w-5 text-primary" />
+                {card.title}
               </CardTitle>
             </CardHeader>
             <CardContent className="px-4 py-3">
@@ -165,14 +274,15 @@ export default function Dashboard() {
               </div>
             </CardContent>
           </Card>
-        </motion.div>
-
-        <motion.div custom={5} initial="hidden" animate="visible" variants={cardVariants}>
+        )
+        
+      case 'taskChart':
+        return (
           <Card>
             <CardHeader className="pb-2 px-4 py-3">
               <CardTitle className="text-base sm:text-lg font-medium flex items-center gap-2">
-                <PieChart className="h-4 w-4 sm:h-5 sm:w-5 text-primary" />
-                Task Distribution
+                <IconComponent className="h-4 w-4 sm:h-5 sm:w-5 text-primary" />
+                {card.title}
               </CardTitle>
             </CardHeader>
             <CardContent className="px-4 py-3">
@@ -184,8 +294,354 @@ export default function Dashboard() {
               </div>
             </CardContent>
           </Card>
+        )
+        
+      default:
+        return (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-sm">Unknown Card Type</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-muted-foreground">This card type is not supported</p>
+            </CardContent>
+          </Card>
+        )
+    }
+  }
+
+  // Get column span class based on card size
+  const getColumnSpanClass = (card: CardConfig) => {
+    switch (card.size) {
+      case 'small':
+        return 'col-span-2 sm:col-span-1 md:col-span-1'
+      case 'medium':
+        return 'col-span-4 sm:col-span-2 md:col-span-2'
+      case 'large':
+        return 'col-span-4 sm:col-span-4 md:col-span-4'
+      default:
+        return 'col-span-2 sm:col-span-1 md:col-span-1'
+    }
+  }
+
+  // Sort and filter cards for display
+  const displayCards = cards
+    .filter(card => card.enabled)
+    .sort((a, b) => a.position - b.position)
+
+  // Separate small and large cards for layout
+  const smallCards = displayCards.filter(card => card.size === 'small')
+  const mediumLargeCards = displayCards.filter(card => card.size !== 'small')
+
+  return (
+    <div className="space-y-6 px-2 md:px-0">
+      <motion.div
+        initial={{ opacity: 0, y: -10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3 }}
+        className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 sm:gap-0"
+      >
+        <h2 className="text-2xl font-bold">Your Progress</h2>
+        <div className="flex flex-wrap gap-2 items-center">
+          <Tabs 
+            value={timeframe} 
+            onValueChange={setTimeframe}
+            className="mr-2"
+          >
+            <TabsList className="bg-muted/50">
+              <TabsTrigger value="daily" className="text-xs">Daily</TabsTrigger>
+              <TabsTrigger value="weekly" className="text-xs">Weekly</TabsTrigger>
+              <TabsTrigger value="monthly" className="text-xs">Monthly</TabsTrigger>
+            </TabsList>
+          </Tabs>
+          
+          <Button
+            variant={isEditMode ? "default" : "outline"}
+            size="sm"
+            onClick={() => setIsEditMode(!isEditMode)}
+            className="h-8"
+          >
+            <Settings className="h-4 w-4 mr-1" />
+            {isEditMode ? "Exit Edit Mode" : "Customize"}
+          </Button>
+        </div>
+      </motion.div>
+
+      {isEditMode && (
+        <motion.div
+          initial={{ opacity: 0, height: 0 }}
+          animate={{ opacity: 1, height: "auto" }}
+          exit={{ opacity: 0, height: 0 }}
+          className="flex flex-wrap gap-2 justify-between items-center bg-muted/30 p-3 rounded-md"
+        >
+          <div className="flex gap-2 flex-wrap">
+            <Button size="sm" onClick={addCard} className="h-8">
+              <Plus className="h-4 w-4 mr-1" />
+              Add Card
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={resetToDefaults}
+              className="h-8"
+            >
+              Reset Layout
+            </Button>
+          </div>
+          <Button
+            size="sm"
+            onClick={saveCardConfig}
+            className="h-8"
+          >
+            <Save className="h-4 w-4 mr-1" />
+            Save Layout
+          </Button>
         </motion.div>
+      )}
+
+      {/* Small cards section */}
+      <div className="grid grid-cols-4 gap-3">
+        {smallCards.map((card, index) => (
+          <motion.div
+            key={card.id}
+            custom={index}
+            initial="hidden"
+            animate="visible"
+            variants={cardVariants}
+            className={getColumnSpanClass(card)}
+          >
+            {isEditMode ? (
+              <div className="relative">
+                {renderCardContent(card)}
+                <div className="absolute inset-0 bg-black/30 backdrop-blur-[1px] rounded-md flex items-center justify-center">
+                  <div className="flex gap-1">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        setEditingCard(card)
+                        setIsConfigOpen(true)
+                      }}
+                      className="h-7 w-7 p-0 bg-white/90"
+                    >
+                      <Edit className="h-3 w-3" />
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => moveCardUp(index)}
+                      className="h-7 w-7 p-0 bg-white/90"
+                    >
+                      <Move className="h-3 w-3 rotate-180" />
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => moveCardDown(index)}
+                      className="h-7 w-7 p-0 bg-white/90"
+                    >
+                      <Move className="h-3 w-3" />
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => deleteCard(card.id)}
+                      className="h-7 w-7 p-0 bg-white/90 text-red-500"
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              renderCardContent(card)
+            )}
+          </motion.div>
+        ))}
       </div>
+
+      {/* Medium and Large cards section */}
+      <div className="grid grid-cols-4 gap-3 mt-3">
+        {mediumLargeCards.map((card, index) => (
+          <motion.div
+            key={card.id}
+            custom={smallCards.length + index}
+            initial="hidden"
+            animate="visible"
+            variants={cardVariants}
+            className={getColumnSpanClass(card)}
+          >
+            {isEditMode ? (
+              <div className="relative">
+                {renderCardContent(card)}
+                <div className="absolute inset-0 bg-black/30 backdrop-blur-[1px] rounded-md flex items-center justify-center">
+                  <div className="flex gap-1">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        setEditingCard(card)
+                        setIsConfigOpen(true)
+                      }}
+                      className="h-7 w-7 p-0 bg-white/90"
+                    >
+                      <Edit className="h-3 w-3" />
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => moveCardUp(index + smallCards.length)}
+                      className="h-7 w-7 p-0 bg-white/90"
+                    >
+                      <Move className="h-3 w-3 rotate-180" />
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => moveCardDown(index + smallCards.length)}
+                      className="h-7 w-7 p-0 bg-white/90"
+                    >
+                      <Move className="h-3 w-3" />
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => deleteCard(card.id)}
+                      className="h-7 w-7 p-0 bg-white/90 text-red-500"
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              renderCardContent(card)
+            )}
+          </motion.div>
+        ))}
+      </div>
+
+      {/* Card configuration dialog */}
+      <Dialog open={isConfigOpen} onOpenChange={setIsConfigOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Configure Card</DialogTitle>
+          </DialogHeader>
+          {editingCard && (
+            <div className="grid gap-4 py-4">
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="cardTitle" className="text-right">
+                  Title
+                </Label>
+                <Input
+                  id="cardTitle"
+                  value={editingCard.title}
+                  onChange={(e) => setEditingCard({...editingCard, title: e.target.value})}
+                  className="col-span-3"
+                />
+              </div>
+              
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="cardType" className="text-right">
+                  Type
+                </Label>
+                <Select
+                  value={editingCard.type}
+                  onValueChange={(value) => setEditingCard({...editingCard, type: value as CardType})}
+                >
+                  <SelectTrigger className="col-span-3">
+                    <SelectValue placeholder="Select type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="habits">Habits</SelectItem>
+                    <SelectItem value="tasks">Tasks</SelectItem>
+                    <SelectItem value="streak">Streak</SelectItem>
+                    <SelectItem value="reminders">Reminders</SelectItem>
+                    <SelectItem value="habitChart">Habit Chart</SelectItem>
+                    <SelectItem value="taskChart">Task Chart</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="cardIcon" className="text-right">
+                  Icon
+                </Label>
+                <Select
+                  value={editingCard.icon}
+                  onValueChange={(value) => setEditingCard({...editingCard, icon: value})}
+                >
+                  <SelectTrigger className="col-span-3">
+                    <SelectValue placeholder="Select icon" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Target">Target</SelectItem>
+                    <SelectItem value="CheckSquare">CheckSquare</SelectItem>
+                    <SelectItem value="Zap">Zap</SelectItem>
+                    <SelectItem value="Bell">Bell</SelectItem>
+                    <SelectItem value="BarChart">BarChart</SelectItem>
+                    <SelectItem value="PieChart">PieChart</SelectItem>
+                    <SelectItem value="TrendingUp">TrendingUp</SelectItem>
+                    <SelectItem value="Award">Award</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="cardSize" className="text-right">
+                  Size
+                </Label>
+                <Select
+                  value={editingCard.size}
+                  onValueChange={(value) => setEditingCard({...editingCard, size: value as 'small' | 'medium' | 'large'})}
+                >
+                  <SelectTrigger className="col-span-3">
+                    <SelectValue placeholder="Select size" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="small">Small</SelectItem>
+                    <SelectItem value="medium">Medium</SelectItem>
+                    <SelectItem value="large">Full Width</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="cardEnabled" className="text-right">
+                  Enabled
+                </Label>
+                <div className="col-span-3 flex items-center space-x-2">
+                  <Switch
+                    id="cardEnabled"
+                    checked={editingCard.enabled}
+                    onCheckedChange={(checked) =>
+                      setEditingCard({...editingCard, enabled: checked})
+                    }
+                  />
+                  <Label htmlFor="cardEnabled" className="text-sm font-normal">
+                    {editingCard.enabled ? "Visible" : "Hidden"}
+                  </Label>
+                </div>
+              </div>
+              
+              <div className="flex justify-end space-x-2 pt-4">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setEditingCard(null)
+                    setIsConfigOpen(false)
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button onClick={() => updateCard(editingCard)}>
+                  Save Changes
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
