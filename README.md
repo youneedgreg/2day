@@ -133,7 +133,6 @@ Made with ❤️ for productivity enthusiasts\
 
 
 ## implement
-dashboard pick components
 navbar
 storage
 habit tracker calender 
