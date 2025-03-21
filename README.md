@@ -134,6 +134,7 @@ Made with ❤️ for productivity enthusiasts\
 
 ## implement
 google calender
+reminder cards
 habit tracker calender 
 todos, reminders tabs for all, upcomming and today
 to do priorities and stuff
