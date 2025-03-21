@@ -11,6 +11,7 @@ import Dashboard from "@/components/dashboard"
 import Navbar from "@/components/navbar"
 import ProductivityLoader, { PageLoader } from "@/components/ui/loader"
 import Image from "next/image"
+import Calendar from "@/components/calender"
 import { 
   CalendarCheck2, 
   CheckSquare, 
@@ -18,6 +19,7 @@ import {
   StickyNote, 
   BarChart3, 
   Sun, 
+  Calendar as CalendarIcon,
   Moon 
 } from "lucide-react"
 
@@ -91,7 +93,8 @@ export default function Home() {
     { value: "habits", label: "Habits", icon: <CalendarCheck2 className="h-5 w-5" /> },
     { value: "todos", label: "Todos", icon: <CheckSquare className="h-5 w-5" /> },
     { value: "reminders", label: "Reminders", icon: <Bell className="h-5 w-5" /> },
-    { value: "notes", label: "Notes", icon: <StickyNote className="h-5 w-5" /> }
+    { value: "notes", label: "Notes", icon: <StickyNote className="h-5 w-5" /> },
+    { value: "calendar", label: "Calendar", icon: <CalendarIcon className="h-5 w-5" /> },
   ]
 
   return (
@@ -277,6 +280,17 @@ export default function Home() {
                     <Dashboard />
                   </motion.div>
                 )}
+                {activeTab === "calendar" && (
+  <motion.div
+    key="calendar"
+    initial={{ opacity: 0, y: 20 }}
+    animate={{ opacity: 1, y: 0 }}
+    exit={{ opacity: 0, y: -20 }}
+    transition={{ duration: 0.2 }}
+  >
+    <Calendar />
+  </motion.div>
+)}
                 
                 {activeTab === "habits" && (
                   <motion.div
