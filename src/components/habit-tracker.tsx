@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { motion, AnimatePresence } from "framer-motion"
+import { motion } from "framer-motion"
 import { Plus, X, Check, Trash2, ArrowUp, ArrowDown, Flame, Calendar, Sparkles } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -11,24 +11,125 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { type Habit, type HabitType, getHabits, saveHabits, generateId, getTodayFormatted } from "@/lib/storage"
+
+// Define types directly in this file
+type HabitType = "builder" | "quitter"
+
+type HistoryEntry = {
+  date: string
+  completed: boolean
+}
+
+type Habit = {
+  id: string
+  name: string
+  type: HabitType
+  frequency: string[]
+  streak: number
+  history: HistoryEntry[]
+  createdAt: string
+}
+
+// Helper functions
+const generateId = (): string => {
+  return Math.random().toString(36).substring(2, 9)
+}
+
+const getTodayFormatted = (): string => {
+  return new Date().toISOString().split('T')[0]
+}
+
+// Debugging function for localStorage
+const debugLocalStorage = () => {
+  if (typeof window !== 'undefined') {
+    const storedHabits = localStorage.getItem('habits')
+    console.log('Raw habits from localStorage:', storedHabits)
+    if (storedHabits) {
+      try {
+        const parsed = JSON.parse(storedHabits)
+        console.log('Parsed habits:', parsed)
+        return parsed
+      } catch (error) {
+        console.error('Error parsing habits from localStorage:', error)
+      }
+    } else {
+      console.log('No habits found in localStorage')
+    }
+  }
+  return []
+}
+
+// Improved localStorage functions
+const getHabitsFromLocalStorage = (): Habit[] => {
+  if (typeof window === 'undefined') return []
+  
+  const storedHabits = localStorage.getItem('habits')
+  console.log('Getting habits from localStorage:', storedHabits)
+  
+  if (!storedHabits) return []
+  
+  try {
+    const parsedHabits = JSON.parse(storedHabits)
+    console.log('Successfully parsed habits:', parsedHabits)
+    return Array.isArray(parsedHabits) ? parsedHabits : []
+  } catch (error) {
+    console.error('Error parsing habits from localStorage:', error)
+    return []
+  }
+}
+
+const saveHabitsToLocalStorage = (habits: Habit[]): void => {
+  if (typeof window === 'undefined') return
+  console.log('Saving habits to localStorage:', habits)
+  localStorage.setItem('habits', JSON.stringify(habits))
+}
 
 const DAYS_OF_WEEK = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 
 export default function HabitTracker() {
-  const [habits, setHabits] = useState<Habit[]>([])
+  // Use lazy initialization for habits state
+  const [habits, setHabits] = useState<Habit[]>(() => {
+    // This function only runs once during initial render
+    if (typeof window !== 'undefined') {
+      const storedHabits = localStorage.getItem('habits')
+      if (storedHabits) {
+        try {
+          const parsed = JSON.parse(storedHabits)
+          console.log('Initially loaded habits:', parsed)
+          return Array.isArray(parsed) ? parsed : []
+        } catch (error) {
+          console.error('Error parsing initial habits:', error)
+        }
+      }
+    }
+    return []
+  })
+  
   const [newHabit, setNewHabit] = useState("")
   const [habitType, setHabitType] = useState<HabitType>("builder")
   const [frequency, setFrequency] = useState<string[]>(["Mon", "Tue", "Wed", "Thu", "Fri"])
   const [dialogOpen, setDialogOpen] = useState(false)
   const [activeTab, setActiveTab] = useState<"all" | "builder" | "quitter">("all")
 
+  // Backup loading from localStorage on component mount
   useEffect(() => {
-    setHabits(getHabits())
+    console.log('Component mounted, loading habits from localStorage')
+    const loadedHabits = getHabitsFromLocalStorage()
+    console.log('Loaded habits:', loadedHabits)
+    
+    // Only set habits if we actually found some
+    if (loadedHabits.length > 0) {
+      setHabits(loadedHabits)
+    }
+    
+    // Manually check localStorage content
+    debugLocalStorage()
   }, [])
 
+  // Save habits to localStorage whenever they change
   useEffect(() => {
-    saveHabits(habits)
+    console.log('Saving habits to localStorage:', habits)
+    saveHabitsToLocalStorage(habits)
   }, [habits])
 
   const addHabit = () => {
@@ -107,10 +208,21 @@ export default function HabitTracker() {
     )
   }
 
-  const filteredHabits = habits.filter((habit) => {
-    if (activeTab === "all") return true
-    return habit.type === activeTab
-  })
+  // Modified filteredHabits to ensure it works as expected
+  const filteredHabits = activeTab === "all" 
+    ? habits 
+    : habits.filter(habit => habit.type === activeTab)
+
+  // Debug function to log current state
+  const debugHabits = () => {
+    console.log('All habits:', habits)
+    console.log('Active tab:', activeTab)
+    console.log('Filtered habits:', filteredHabits)
+    console.log('Are there habits to show?', filteredHabits.length > 0)
+  }
+
+  // Call debug function
+  debugHabits()
 
   const isHabitDueToday = (habit: Habit) => {
     const today = new Date()
@@ -122,25 +234,6 @@ export default function HabitTracker() {
     const today = getTodayFormatted()
     const todayEntry = habit.history.find((entry) => entry.date === today)
     return todayEntry?.completed || false
-  }
-
-  const containerVariants = {
-    hidden: { opacity: 0 },
-    visible: {
-      opacity: 1,
-      transition: {
-        staggerChildren: 0.07,
-      },
-    },
-  }
-
-  const itemVariants = {
-    hidden: { y: 20, opacity: 0 },
-    visible: {
-      y: 0,
-      opacity: 1,
-      transition: { type: "spring", stiffness: 300, damping: 24 },
-    },
   }
 
   const buttonVariants = {
@@ -175,12 +268,15 @@ export default function HabitTracker() {
               </Button>
             </motion.div>
           </DialogTrigger>
-          <DialogContent className="sm:max-w-md">
+          <DialogContent className="sm:max-w-md" aria-describedby="habit-form-description">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 <Calendar className="h-5 w-5 text-primary" />
                 Create a New Habit
               </DialogTitle>
+              <p id="habit-form-description" className="text-sm text-muted-foreground">
+                Create a new habit to track and build your routine.
+              </p>
             </DialogHeader>
             <div className="space-y-4 py-4">
               <div className="space-y-2">
@@ -268,6 +364,7 @@ export default function HabitTracker() {
         </Tabs>
       </motion.div>
 
+      {/* Render empty state or habit cards */}
       {filteredHabits.length === 0 ? (
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -293,109 +390,82 @@ export default function HabitTracker() {
           </div>
         </motion.div>
       ) : (
-        <motion.div
-          className="grid grid-cols-1 md:grid-cols-2 gap-4"
-          variants={containerVariants}
-          initial="hidden"
-          animate="visible"
-        >
-          <AnimatePresence>
-            {filteredHabits.map((habit) => (
-              <motion.div
-                key={habit.id}
-                variants={itemVariants}
-                exit={{ opacity: 0, y: -10, transition: { duration: 0.2 } }}
-                layout
-              >
-                <Card
-                  className={`
-                    overflow-hidden transition-all duration-200 hover:shadow-md
-                    ${!isHabitDueToday(habit) ? "opacity-70" : ""}
-                    ${isHabitCompletedToday(habit) ? "border-green-500 dark:border-green-700 bg-green-50/30 dark:bg-green-900/10" : ""}
-                  `}
-                >
-                  <CardHeader className="pb-2">
-                    <div className="flex justify-between items-start">
-                      <div className="space-y-1">
-                        <CardTitle className="flex items-center gap-2">
-                          {habit.type === "builder" ? (
-                            <ArrowUp className="h-4 w-4 text-green-500" />
-                          ) : (
-                            <ArrowDown className="h-4 w-4 text-red-500" />
-                          )}
-                          {habit.name}
-                          {habit.streak > 0 && (
-                            <motion.div
-                              initial={{ scale: 0 }}
-                              animate={{ scale: 1 }}
-                              transition={{ type: "spring", stiffness: 300, damping: 10 }}
-                            >
-                              <Badge variant="outline" className="flex items-center gap-1 ml-2">
-                                <Flame className="h-3 w-3 text-orange-500" />
-                                {habit.streak}
-                              </Badge>
-                            </motion.div>
-                          )}
-                        </CardTitle>
-                        <div className="flex gap-1 text-xs text-muted-foreground">
-                          {habit.frequency.map((day) => (
-                            <span key={day} className="px-1">
-                              {day}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <motion.div whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => toggleHabitCompletion(habit.id)}
-                            disabled={!isHabitDueToday(habit)}
-                            className={isHabitCompletedToday(habit) ? "text-green-500" : ""}
-                          >
-                            {isHabitCompletedToday(habit) ? <Check className="h-5 w-5" /> : <X className="h-5 w-5" />}
-                          </Button>
-                        </motion.div>
-                        <motion.div whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}>
-                          <Button variant="ghost" size="icon" onClick={() => deleteHabit(habit.id)}>
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </motion.div>
-                      </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {filteredHabits.map((habit) => (
+            <Card
+              key={habit.id}
+              className={`
+                overflow-hidden transition-all duration-200 hover:shadow-md
+                ${!isHabitDueToday(habit) ? "opacity-70" : ""}
+                ${isHabitCompletedToday(habit) ? "border-green-500 dark:border-green-700 bg-green-50/30 dark:bg-green-900/10" : ""}
+              `}
+            >
+              <CardHeader className="pb-2">
+                <div className="flex justify-between items-start">
+                  <div className="space-y-1">
+                    <CardTitle className="flex items-center gap-2">
+                      {habit.type === "builder" ? (
+                        <ArrowUp className="h-4 w-4 text-green-500" />
+                      ) : (
+                        <ArrowDown className="h-4 w-4 text-red-500" />
+                      )}
+                      {habit.name}
+                      {habit.streak > 0 && (
+                        <Badge variant="outline" className="flex items-center gap-1 ml-2">
+                          <Flame className="h-3 w-3 text-orange-500" />
+                          {habit.streak}
+                        </Badge>
+                      )}
+                    </CardTitle>
+                    <div className="flex gap-1 text-xs text-muted-foreground">
+                      {habit.frequency.map((day) => (
+                        <span key={day} className="px-1">
+                          {day}
+                        </span>
+                      ))}
                     </div>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="flex gap-1 mt-2">
-                      {Array.from({ length: 7 }).map((_, i) => {
-                        const date = new Date()
-                        date.setDate(date.getDate() - 6 + i)
-                        const dateStr = date.toISOString().split("T")[0]
-                        const entry = habit.history.find((h) => h.date === dateStr)
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => toggleHabitCompletion(habit.id)}
+                      disabled={!isHabitDueToday(habit)}
+                      className={isHabitCompletedToday(habit) ? "text-green-500" : ""}
+                    >
+                      {isHabitCompletedToday(habit) ? <X className="h-5 w-5" /> : <Check className="h-5 w-5" /> }
+                    </Button>
+                    <Button variant="ghost" size="icon" onClick={() => deleteHabit(habit.id)}>
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="flex gap-1 mt-2">
+                  {Array.from({ length: 7 }).map((_, i) => {
+                    const date = new Date()
+                    date.setDate(date.getDate() - 6 + i)
+                    const dateStr = date.toISOString().split("T")[0]
+                    const entry = habit.history.find((h) => h.date === dateStr)
 
-                        return (
-                          <motion.div
-                            key={i}
-                            initial={{ scaleY: 0 }}
-                            animate={{ scaleY: 1 }}
-                            transition={{ delay: i * 0.05, duration: 0.2 }}
-                            className={`
-                              flex-1 h-2 rounded-full
-                              ${entry?.completed ? "bg-green-500 dark:bg-green-700" : "bg-muted"}
-                            `}
-                            title={dateStr}
-                          />
-                        )
-                      })}
-                    </div>
-                  </CardContent>
-                </Card>
-              </motion.div>
-            ))}
-          </AnimatePresence>
-        </motion.div>
+                    return (
+                      <div
+                        key={i}
+                        className={`
+                          flex-1 h-2 rounded-full
+                          ${entry?.completed ? "bg-green-500 dark:bg-green-700" : "bg-muted"}
+                        `}
+                        title={dateStr}
+                      />
+                    )
+                  })}
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
       )}
     </div>
   )
 }
-

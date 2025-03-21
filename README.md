@@ -133,7 +133,7 @@ Made with ❤️ for productivity enthusiasts\
 
 
 ## implement
-navbar
+auth
 storage
 habit tracker calender 
 todos, reminders tabs for all, upcomming and today
