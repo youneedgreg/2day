@@ -256,45 +256,199 @@ export default function Dashboard() {
           </Card>
         )
         
-      case 'habitChart':
-        return (
-          <Card>
-            <CardHeader className="pb-2 px-4 py-3">
-              <CardTitle className="text-base sm:text-lg font-medium flex items-center gap-2">
-                <IconComponent className="h-4 w-4 sm:h-5 sm:w-5 text-primary" />
-                {card.title}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="px-4 py-3">
-              <div className="aspect-square sm:aspect-[4/3] bg-muted/30 rounded-md flex flex-col items-center justify-center p-4 sm:p-6">
-                <TrendingUp className="h-8 w-8 sm:h-12 sm:w-12 text-muted-foreground/40 mb-3" />
-                <p className="text-sm text-muted-foreground text-center">
-                  Your habit data will appear here
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-        )
+        case 'habitChart':
+          // Calculate completion rates by day of week
+          const habitsByDay: { [key: string]: { total: number; completed: number } } = {
+            "Mon": { total: 0, completed: 0 },
+            "Tue": { total: 0, completed: 0 },
+            "Wed": { total: 0, completed: 0 },
+            "Thu": { total: 0, completed: 0 },
+            "Fri": { total: 0, completed: 0 },
+            "Sat": { total: 0, completed: 0 },
+            "Sun": { total: 0, completed: 0 },
+          };
+          
+          // Get the most recent 30 days of habit history
+          const recentDate = new Date();
+          recentDate.setDate(recentDate.getDate() - 30);
+          const recentDateStr = recentDate.toISOString().split('T')[0];
+          
+          // Fill in the data
+          habits.forEach(habit => {
+            const recentHistory = habit.history.filter(entry => entry.date >= recentDateStr);
+            
+            recentHistory.forEach(entry => {
+              // Get day of week for this entry
+              const date = new Date(entry.date);
+              const dayOfWeek = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][date.getDay()];
+              
+              // Only count if this habit is scheduled for this day
+              if (habit.frequency.includes(dayOfWeek)) {
+                habitsByDay[dayOfWeek].total += 1;
+                if (entry.completed) {
+                  habitsByDay[dayOfWeek].completed += 1;
+                }
+              }
+            });
+          });
+          
+          // Convert to percentage completion rates
+          const completionData = Object.entries(habitsByDay).map(([day, data]) => ({
+            day,
+            rate: data.total > 0 ? Math.round((data.completed / data.total) * 100) : 0,
+            completed: data.completed,
+            total: data.total
+          }));
+          
+          // Sort by days of week in correct order
+          const orderedDays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+          completionData.sort((a, b) => orderedDays.indexOf(a.day) - orderedDays.indexOf(b.day));
         
+          return (
+            <Card>
+              <CardHeader className="pb-2 px-4 py-3">
+                <CardTitle className="text-base sm:text-lg font-medium flex items-center gap-2">
+                  <IconComponent className="h-4 w-4 sm:h-5 sm:w-5 text-primary" />
+                  {card.title}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="px-4 py-3">
+                {habits.length === 0 ? (
+                  <div className="aspect-square sm:aspect-[4/3] bg-muted/30 rounded-md flex flex-col items-center justify-center p-4 sm:p-6">
+                    <TrendingUp className="h-8 w-8 sm:h-12 sm:w-12 text-muted-foreground/40 mb-3" />
+                    <p className="text-sm text-muted-foreground text-center">
+                      Add some habits to see your completion data
+                    </p>
+                  </div>
+                ) : (
+                  <div className="h-64">
+                    <div className="flex items-end h-48 gap-1 mt-4">
+                      {completionData.map((item) => (
+                        <div key={item.day} className="flex-1 flex flex-col items-center">
+                          <div 
+                            className="w-full bg-blue-500/20 dark:bg-blue-500/10 rounded-t-sm relative group"
+                            style={{ 
+                              height: `${Math.max(4, item.rate)}%`,
+                              minHeight: item.total > 0 ? '4px' : '0'
+                            }}
+                          >
+                            {item.total > 0 && (
+                              <div className="absolute inset-0 bg-blue-500 rounded-t-sm opacity-80" 
+                                style={{ height: `${item.rate}%` }} 
+                              />
+                            )}
+                            <div className="hidden group-hover:block absolute -top-10 left-1/2 -translate-x-1/2 bg-black/80 text-white text-xs px-2 py-1 rounded whitespace-nowrap">
+                              {item.completed}/{item.total} completed ({item.rate}%)
+                            </div>
+                          </div>
+                          <div className="text-xs font-medium mt-2">{item.day}</div>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="mt-4 text-xs text-center text-muted-foreground">
+                      Last 30 days of habit completion by day of week
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )
       case 'taskChart':
-        return (
-          <Card>
-            <CardHeader className="pb-2 px-4 py-3">
-              <CardTitle className="text-base sm:text-lg font-medium flex items-center gap-2">
-                <IconComponent className="h-4 w-4 sm:h-5 sm:w-5 text-primary" />
-                {card.title}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="px-4 py-3">
-              <div className="aspect-square sm:aspect-[4/3] bg-muted/30 rounded-md flex flex-col items-center justify-center p-4 sm:p-6">
-                <Award className="h-8 w-8 sm:h-12 sm:w-12 text-muted-foreground/40 mb-3" />
-                <p className="text-sm text-muted-foreground text-center">
-                  Your task data will appear here
-                </p>
+  // Calculate task statistics
+  const completedTasks = todos.filter(todo => todo.completed).length;
+  const pendingTasks = todos.filter(todo => !todo.completed).length;
+  const totalTasks = todos.length;
+  
+  // Calculate percentages for visualization
+  const completedPercentage = totalTasks > 0 ? (completedTasks / totalTasks) * 100 : 0;
+  const pendingPercentage = totalTasks > 0 ? (pendingTasks / totalTasks) * 100 : 0;
+  
+  return (
+    <Card>
+      <CardHeader className="pb-2 px-4 py-3">
+        <CardTitle className="text-base sm:text-lg font-medium flex items-center gap-2">
+          <IconComponent className="h-4 w-4 sm:h-5 sm:w-5 text-primary" />
+          {card.title}
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="px-4 py-3">
+        {todos.length === 0 ? (
+          <div className="aspect-square sm:aspect-[4/3] bg-muted/30 rounded-md flex flex-col items-center justify-center p-4 sm:p-6">
+            <Award className="h-8 w-8 sm:h-12 sm:w-12 text-muted-foreground/40 mb-3" />
+            <p className="text-sm text-muted-foreground text-center">
+              Add some tasks to see your task distribution
+            </p>
+          </div>
+        ) : (
+          <div className="h-64 flex flex-col justify-center">
+            {/* Simple donut chart implementation */}
+            <div className="relative mx-auto w-36 h-36 sm:w-40 sm:h-40">
+              {/* Base circle */}
+              <div className="absolute inset-0 rounded-full bg-muted"></div>
+              
+              {/* Only render segments if there are tasks */}
+              {totalTasks > 0 && (
+                <>
+                  {/* Completed segment */}
+                  {completedTasks > 0 && (
+                    <div className="absolute inset-0">
+                      <div 
+                        className="w-full h-full rounded-full bg-green-500"
+                        style={{
+                          clipPath: `polygon(50% 50%, 50% 0, ${completedPercentage >= 50 
+                            ? '100% 0, 100% 100%, 0 100%, 0 0, 50% 0'
+                            : `${50 + completedPercentage}% 0`
+                          })`
+                        }}
+                      ></div>
+                    </div>
+                  )}
+                  
+                  {/* Pending segment */}
+                  {pendingTasks > 0 && (
+                    <div className="absolute inset-0">
+                      <div 
+                        className="w-full h-full rounded-full bg-amber-500"
+                        style={{
+                          clipPath: `polygon(50% 50%, ${completedPercentage <= 50 
+                            ? `${50 + completedPercentage}% 0` 
+                            : '50% 0'
+                          }, ${pendingPercentage >= 50 
+                            ? '100% 0, 100% 100%, 0 100%, 0 0'
+                            : `100% 0, 100% ${pendingPercentage * 3.6}%`
+                          })`
+                        }}
+                      ></div>
+                    </div>
+                  )}
+                </>
+              )}
+              
+              {/* Inner circle for donut effect */}
+              <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-24 h-24 sm:w-28 sm:h-28 rounded-full bg-background flex items-center justify-center">
+                <div className="text-center">
+                  <div className="text-2xl font-bold">{todoCompletionRate}%</div>
+                  <div className="text-xs text-muted-foreground">Completed</div>
+                </div>
               </div>
-            </CardContent>
-          </Card>
-        )
+            </div>
+            
+            {/* Legend */}
+            <div className="flex justify-center mt-6 gap-6">
+              <div className="flex items-center">
+                <div className="w-3 h-3 rounded-full bg-green-500 mr-2"></div>
+                <span className="text-sm">{completedTasks} Completed</span>
+              </div>
+              <div className="flex items-center">
+                <div className="w-3 h-3 rounded-full bg-amber-500 mr-2"></div>
+                <span className="text-sm">{pendingTasks} Pending</span>
+              </div>
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  )
         
       default:
         return (
