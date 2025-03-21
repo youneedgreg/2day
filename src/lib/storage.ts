@@ -35,8 +35,8 @@ export interface Note {
 }
 
 // Storage keys
-const HABITS_KEY = "2day-habits"
-const TODOS_KEY = "2day-todos"
+const HABITS_KEY = "habits"
+const TODOS_KEY = "todos"
 const REMINDERS_KEY = "2day-reminders"
 const NOTES_KEY = "2day-notes"
 
