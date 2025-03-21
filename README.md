@@ -133,8 +133,6 @@ Made with ❤️ for productivity enthusiasts\
 
 
 ## implement
-auth
-storage
 habit tracker calender 
 todos, reminders tabs for all, upcomming and today
 to do priorities and stuff
@@ -150,6 +148,8 @@ intro to app
 
 
 collaboration
+auth
+storage
 auth
 vision board
 goals
