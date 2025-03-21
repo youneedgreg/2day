@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { motion, AnimatePresence } from "framer-motion"
+import { motion } from "framer-motion"
 import { Plus, Trash2, Calendar, Bell, AlertCircle, CheckCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -9,20 +9,108 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
-import { type Reminder, getReminders, saveReminders, generateId } from "@/lib/storage"
+
+// Define types
+type Reminder = {
+  id: string
+  text: string
+  date: string
+  completed: boolean
+  createdAt: string
+}
+
+// Helper functions
+const generateId = (): string => {
+  return Math.random().toString(36).substring(2, 9)
+}
+
+// Local storage functions
+const getRemindersFromLocalStorage = (): Reminder[] => {
+  if (typeof window === 'undefined') return []
+  
+  const storedReminders = localStorage.getItem('reminders')
+  console.log('Getting reminders from localStorage:', storedReminders)
+  
+  if (!storedReminders) return []
+  
+  try {
+    const parsedReminders = JSON.parse(storedReminders)
+    console.log('Successfully parsed reminders:', parsedReminders)
+    return Array.isArray(parsedReminders) ? parsedReminders : []
+  } catch (error) {
+    console.error('Error parsing reminders from localStorage:', error)
+    return []
+  }
+}
+
+const saveRemindersToLocalStorage = (reminders: Reminder[]): void => {
+  if (typeof window === 'undefined') return
+  console.log('Saving reminders to localStorage:', reminders)
+  localStorage.setItem('reminders', JSON.stringify(reminders))
+}
+
+// Debug function for localStorage
+const debugLocalStorage = () => {
+  if (typeof window !== 'undefined') {
+    const storedReminders = localStorage.getItem('reminders')
+    console.log('Raw reminders from localStorage:', storedReminders)
+    if (storedReminders) {
+      try {
+        const parsed = JSON.parse(storedReminders)
+        console.log('Parsed reminders:', parsed)
+        return parsed
+      } catch (error) {
+        console.error('Error parsing reminders from localStorage:', error)
+      }
+    } else {
+      console.log('No reminders found in localStorage')
+    }
+  }
+  return []
+}
 
 export default function Reminders() {
-  const [reminders, setReminders] = useState<Reminder[]>([])
+  // Use lazy initialization for reminders state
+  const [reminders, setReminders] = useState<Reminder[]>(() => {
+    // This function only runs once during initial render
+    if (typeof window !== 'undefined') {
+      const storedReminders = localStorage.getItem('reminders')
+      if (storedReminders) {
+        try {
+          const parsed = JSON.parse(storedReminders)
+          console.log('Initially loaded reminders:', parsed)
+          return Array.isArray(parsed) ? parsed : []
+        } catch (error) {
+          console.error('Error parsing initial reminders:', error)
+        }
+      }
+    }
+    return []
+  })
+  
   const [newReminderText, setNewReminderText] = useState("")
   const [newReminderDate, setNewReminderDate] = useState("")
   const [dialogOpen, setDialogOpen] = useState(false)
 
+  // Backup loading from localStorage on component mount
   useEffect(() => {
-    setReminders(getReminders())
+    console.log('Component mounted, loading reminders from localStorage')
+    const loadedReminders = getRemindersFromLocalStorage()
+    console.log('Loaded reminders:', loadedReminders)
+    
+    // Only set reminders if we actually found some
+    if (loadedReminders.length > 0) {
+      setReminders(loadedReminders)
+    }
+    
+    // Manually check localStorage content
+    debugLocalStorage()
   }, [])
 
+  // Save reminders to localStorage whenever they change
   useEffect(() => {
-    saveReminders(reminders)
+    console.log('Saving reminders to localStorage:', reminders)
+    saveRemindersToLocalStorage(reminders)
   }, [reminders])
 
   const addReminder = () => {
@@ -76,23 +164,85 @@ export default function Reminders() {
     return reminderDate < today
   }
 
-  const containerVariants = {
-    hidden: { opacity: 0 },
-    visible: {
-      opacity: 1,
-      transition: {
-        staggerChildren: 0.05,
-      },
-    },
+  // Debug function to log current state
+  const debugReminders = () => {
+    console.log('All reminders:', reminders)
+    console.log('Sorted reminders:', sortedReminders)
+    console.log('Are there reminders to show?', reminders.length > 0)
   }
 
-  const itemVariants = {
-    hidden: { y: 20, opacity: 0 },
-    visible: {
-      y: 0,
-      opacity: 1,
-      transition: { type: "spring", stiffness: 300, damping: 24 },
-    },
+  // Call debug function
+  debugReminders()
+
+  // Debug component for development
+  const DebugPanel = () => {
+    const [localStorageContent, setLocalStorageContent] = useState<string>('Loading...')
+    
+    useEffect(() => {
+      if (typeof window !== 'undefined') {
+        const content = localStorage.getItem('reminders') || 'No reminders found'
+        setLocalStorageContent(content)
+      }
+    }, [reminders]) // Update when reminders change
+    
+    if (process.env.NODE_ENV !== 'development') {
+      return null // Only show in development
+    }
+    
+    return (
+      <div className="mt-6 p-4 border border-red-300 rounded bg-red-50 text-sm">
+        <h3 className="font-bold text-red-800 mb-2">Debug Information</h3>
+        <div className="mb-2">
+          <strong>Reminders in state:</strong> {reminders.length}
+        </div>
+        <div className="mb-2">
+          <strong>Sorted reminders:</strong> {sortedReminders.length}
+        </div>
+        <div>
+          <strong>LocalStorage content:</strong>
+          <pre className="mt-1 p-2 bg-white border rounded overflow-auto max-h-40 text-xs">
+            {localStorageContent}
+          </pre>
+        </div>
+        <div className="mt-4 flex gap-2">
+          <Button 
+            size="sm" 
+            variant="outline" 
+            onClick={() => console.log('Current reminders state:', reminders)}
+          >
+            Log State
+          </Button>
+          <Button 
+            size="sm" 
+            variant="outline" 
+            onClick={() => {
+              const today = new Date();
+              const testReminder = {
+                id: generateId(),
+                text: "Debug Test Reminder",
+                date: today.toISOString().split('T')[0],
+                completed: false,
+                createdAt: today.toISOString(),
+              };
+              setReminders(prev => [...prev, testReminder]);
+            }}
+          >
+            Add Test Reminder
+          </Button>
+          <Button 
+            size="sm" 
+            variant="destructive" 
+            onClick={() => {
+              localStorage.removeItem('reminders');
+              setReminders([]);
+              window.location.reload();
+            }}
+          >
+            Clear & Reload
+          </Button>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -192,82 +342,62 @@ export default function Reminders() {
           </div>
         </motion.div>
       ) : (
-        <motion.div className="space-y-2" variants={containerVariants} initial="hidden" animate="visible">
-          <AnimatePresence>
-            {sortedReminders.map((reminder) => (
-              <motion.div
-                key={reminder.id}
-                variants={itemVariants}
-                exit={{ opacity: 0, x: -100, transition: { duration: 0.2 } }}
-                layout
-              >
-                <Card
-                  className={`
-                    overflow-hidden transition-all duration-200 hover:shadow-md
-                    ${reminder.completed ? "bg-muted/30" : ""}
-                    ${!reminder.completed && isOverdue(reminder.date) ? "border-red-500 dark:border-red-700" : ""}
-                  `}
-                >
-                  <CardContent className="p-4 flex items-center justify-between">
-                    <div className="flex items-center space-x-3">
-                      <motion.div whileHover={{ scale: 1.2 }} whileTap={{ scale: 0.9 }}>
-                        <Checkbox
-                          id={reminder.id}
-                          checked={reminder.completed}
-                          onCheckedChange={() => toggleReminder(reminder.id)}
-                          className={reminder.completed ? "border-primary" : ""}
-                        />
-                      </motion.div>
-                      <div>
-                        <motion.label
-                          htmlFor={reminder.id}
-                          className={`block ${reminder.completed ? "line-through text-muted-foreground" : ""}`}
-                          animate={{
-                            opacity: reminder.completed ? 0.6 : 1,
-                            scale: reminder.completed ? 0.98 : 1,
-                          }}
-                          transition={{ duration: 0.2 }}
-                        >
-                          {reminder.text}
-                        </motion.label>
-                        <div className="flex items-center text-xs text-muted-foreground mt-1 gap-2">
-                          <span className="flex items-center gap-1">
-                            <Calendar className="h-3 w-3" />
-                            {formatDate(reminder.date)}
-                          </span>
-                          {!reminder.completed && isOverdue(reminder.date) && (
-                            <motion.span
-                              className="text-red-500 dark:text-red-400 flex items-center gap-1"
-                              initial={{ opacity: 0.5 }}
-                              animate={{ opacity: [0.5, 1, 0.5] }}
-                              transition={{ duration: 2, repeat: Number.POSITIVE_INFINITY }}
-                            >
-                              <AlertCircle className="h-3 w-3" />
-                              Overdue
-                            </motion.span>
-                          )}
-                          {reminder.completed && (
-                            <span className="text-green-500 dark:text-green-400 flex items-center gap-1">
-                              <CheckCircle className="h-3 w-3" />
-                              Completed
-                            </span>
-                          )}
-                        </div>
-                      </div>
+        <div className="space-y-2">
+          {sortedReminders.map((reminder) => (
+            <Card
+              key={reminder.id}
+              className={`
+                overflow-hidden transition-all duration-200 hover:shadow-md
+                ${reminder.completed ? "bg-muted/30" : ""}
+                ${!reminder.completed && isOverdue(reminder.date) ? "border-red-500 dark:border-red-700" : ""}
+              `}
+            >
+              <CardContent className="p-4 flex items-center justify-between">
+                <div className="flex items-center space-x-3">
+                  <Checkbox
+                    id={reminder.id}
+                    checked={reminder.completed}
+                    onCheckedChange={() => toggleReminder(reminder.id)}
+                    className={reminder.completed ? "border-primary" : ""}
+                  />
+                  <div>
+                    <label
+                      htmlFor={reminder.id}
+                      className={`block ${reminder.completed ? "line-through text-muted-foreground" : ""}`}
+                    >
+                      {reminder.text}
+                    </label>
+                    <div className="flex items-center text-xs text-muted-foreground mt-1 gap-2">
+                      <span className="flex items-center gap-1">
+                        <Calendar className="h-3 w-3" />
+                        {formatDate(reminder.date)}
+                      </span>
+                      {!reminder.completed && isOverdue(reminder.date) && (
+                        <span className="text-red-500 dark:text-red-400 flex items-center gap-1">
+                          <AlertCircle className="h-3 w-3" />
+                          Overdue
+                        </span>
+                      )}
+                      {reminder.completed && (
+                        <span className="text-green-500 dark:text-green-400 flex items-center gap-1">
+                          <CheckCircle className="h-3 w-3" />
+                          Completed
+                        </span>
+                      )}
                     </div>
-                    <motion.div whileHover={{ scale: 1.1, rotate: 5 }} whileTap={{ scale: 0.9 }}>
-                      <Button variant="ghost" size="icon" onClick={() => deleteReminder(reminder.id)}>
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </motion.div>
-                  </CardContent>
-                </Card>
-              </motion.div>
-            ))}
-          </AnimatePresence>
-        </motion.div>
+                  </div>
+                </div>
+                <Button variant="ghost" size="icon" onClick={() => deleteReminder(reminder.id)}>
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
       )}
+      
+      {/* Debug panel - only shows in development */}
+      {process.env.NODE_ENV === 'development' && <DebugPanel />}
     </div>
   )
 }
-
