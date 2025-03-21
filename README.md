@@ -152,6 +152,7 @@ intro to app
 collaboration
 auth
 storage
+chat
 auth
 vision board
 goals
