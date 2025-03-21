@@ -332,7 +332,7 @@ export default function Dashboard() {
   }
 
   return (
-    <Card>
+    <Card >
       {/* Similar card structure as before, but with titleSuffix added to the description */}
       <CardHeader className="pb-2 px-4 py-3">
         <CardTitle className="text-base sm:text-lg font-medium flex items-center gap-2">
@@ -392,7 +392,7 @@ export default function Dashboard() {
             const pendingPercentage = totalTasks > 0 ? (pendingTasks / totalTasks) * 100 : 0;
             
             return (
-              <Card>
+              <Card className="overflow-hidden border-t-5 border-b-10  border-t-green-500">
                 <CardHeader className="pb-2 px-4 py-3">
                   <CardTitle className="text-base sm:text-lg font-medium flex items-center gap-2">
                     <IconComponent className="h-4 w-4 sm:h-5 sm:w-5 text-primary" />
