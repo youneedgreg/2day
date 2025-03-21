@@ -11,8 +11,10 @@ import Dashboard from "@/components/dashboard"
 import Navbar from "@/components/navbar"
 import ProductivityLoader, { PageLoader } from "@/components/ui/loader"
 import Image from "next/image"
+import ActivityStream from "@/components/activity"
 import Calendar from "@/components/calender"
 import { 
+  Activity,
   CalendarCheck2, 
   CheckSquare, 
   Bell, 
@@ -90,6 +92,7 @@ export default function Home() {
   // Navigation items shared between mobile and desktop
   const navItems = [
     { value: "dashboard", label: "Dashboard", icon: <BarChart3 className="h-5 w-5" /> },
+    { value: "activity", label: "Activity", icon: <Activity className="h-5 w-5" /> },
     { value: "habits", label: "Habits", icon: <CalendarCheck2 className="h-5 w-5" /> },
     { value: "todos", label: "Todos", icon: <CheckSquare className="h-5 w-5" /> },
     { value: "reminders", label: "Reminders", icon: <Bell className="h-5 w-5" /> },
@@ -303,7 +306,17 @@ export default function Home() {
                     <HabitTracker />
                   </motion.div>
                 )}
-
+                {activeTab === "activity" && (
+  <motion.div
+    key="activity"
+    initial={{ opacity: 0, y: 20 }}
+    animate={{ opacity: 1, y: 0 }}
+    exit={{ opacity: 0, y: -20 }}
+    transition={{ duration: 0.2 }}
+  >
+    <ActivityStream />
+  </motion.div>
+)}
                 {activeTab === "todos" && (
                   <motion.div
                     key="todos"
