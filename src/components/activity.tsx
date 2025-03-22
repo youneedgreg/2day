@@ -168,12 +168,16 @@ export default function ActivityStream() {
   }
   
   // Apply filters to activities
-  const applyFilters = useCallback(() => {
+const applyFilters = useCallback(() => {
     let filtered = [...activities]
     
     // Apply activity type filter
     if (activityFilter !== "all") {
-      filtered = filtered.filter(activity => activity.type === activityFilter)
+      // Convert plural filter name to singular type
+      const typeFilter = activityFilter === "habits" ? "habit" : 
+                        activityFilter === "todos" ? "todo" : "reminder"
+      
+      filtered = filtered.filter(activity => activity.type === typeFilter)
     }
     
     // Apply timeline filter
