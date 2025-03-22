@@ -1,7 +1,13 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
-import { format, isToday, isTomorrow, isPast, differenceInDays,addDays } from "date-fns"
+import { 
+  format, 
+  isToday, 
+  isTomorrow, 
+  isPast, 
+  differenceInDays
+} from "date-fns"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
@@ -43,6 +49,12 @@ export default function ActivityStream() {
   const [timelineFilter, setTimelineFilter] = useState<TimelineFilter>("all")
   const [searchQuery, setSearchQuery] = useState("")
   const [mounted, setMounted] = useState(false)
+
+  const addDaysToDate = (date: Date, days: number): Date => {
+    const result = new Date(date);
+    result.setDate(result.getDate() + days);
+    return result;
+  };
   
   // Load data on component mount
   useEffect(() => {
@@ -65,7 +77,7 @@ export default function ActivityStream() {
     habitList.forEach(habit => {
       // For habits, we'll look ahead 7 days
       for (let i = 0; i < 7; i++) {
-        const date = addDays(today, i)
+        const date = addDaysToDate(today, i);
         const dayOfWeek = format(date, "EEE")
         const formattedDayOfWeek = dayOfWeek === "Sun" ? "Sun" : 
                                   dayOfWeek === "Mon" ? "Mon" : 
