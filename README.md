@@ -128,12 +128,11 @@ All data is stored in your browser's localStorage, meaning:
 
 ---
 
-Made with ❤️ for productivity enthusiasts\
+Made with ❤️ for productivity enthusiastss
 
 
 
 ## implement
-google calender
 reminder cards
 habit tracker calender 
 todos, reminders tabs for all, upcomming and today
@@ -153,7 +152,8 @@ calender activity loader.
 collaboration
 auth
 storage
-chat
+chat 
+floating ai
 auth
 vision board
 goals

@@ -58,14 +58,9 @@ const isSameMonth = (date1: Date, date2: Date): boolean => {
     return new Date(dateString);
   };
   
-  // You can keep using format from date-fns as it seems to be working correctly
-  // If you need a custom format function, here's a simple version for common formats:
-  // Fixed formatDate function to correctly handle AM/PM and month names
-const formatDate = (date: Date, formatStr: string): string => {
-    // Helper functions
-    const padZero = (num: number, targetLength: number = 2) => num.toString().padStart(targetLength, '0');
-    
-    // Date components
+  const formatDate = (date: Date, formatStr: string) => {
+    const padZero = (num: number, targetLength = 2) => num.toString().padStart(targetLength, '0');
+  
     const day = date.getDate();
     const dayOfWeek = date.getDay();
     const month = date.getMonth();
@@ -74,100 +69,85 @@ const formatDate = (date: Date, formatStr: string): string => {
     const hours12 = hours24 % 12 || 12;
     const minutes = date.getMinutes();
     const seconds = date.getSeconds();
-    
-    // Day names and month names
+  
     const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
     const shortDayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
     const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
     const shortMonthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-    
-    // First, handle common format patterns to avoid regex replacement issues
-    if (formatStr === "h:mm A") {
-      return `${hours12}:${padZero(minutes)} ${hours24 < 12 ? 'AM' : 'PM'}`;
-    }
-    
-    if (formatStr === "h:mm A MMM d, yyyy") {
-      return `${hours12}:${padZero(minutes)} ${hours24 < 12 ? 'AM' : 'PM'} ${shortMonthNames[month]} ${day}, ${year}`;
-    }
-    
-    if (formatStr === "MMMM d, yyyy") {
-      return `${monthNames[month]} ${day}, ${year}`;
-    }
-    
-    if (formatStr === "MMM d, yyyy") {
-      return `${shortMonthNames[month]} ${day}, ${year}`;
+  
+    // Handle direct format cases first
+    switch (formatStr) {
+      case "h:mm A":
+        return `${hours12}:${padZero(minutes)} ${hours24 < 12 ? 'AM' : 'PM'}`;
+      case "h:mm A MMM d, yyyy":
+        return `${hours12}:${padZero(minutes)} ${hours24 < 12 ? 'AM' : 'PM'} ${shortMonthNames[month]} ${day}, ${year}`;
+      case "MMMM d, yyyy":
+        return `${monthNames[month]} ${day}, ${year}`;
+      case "MMMM yyyy":
+        return `${monthNames[month]} ${year}`;
+      case "MMMM":
+        return monthNames[month];
+      case "MMM d, yyyy":
+        return `${shortMonthNames[month]} ${day}, ${year}`;
+      case "MMM d":
+        return `${shortMonthNames[month]} ${day}`;
+      case "PP":
+        return `${monthNames[month]} ${day}, ${year}`;
+      case "PPP":
+        return `${dayNames[dayOfWeek]}, ${monthNames[month]} ${day}, ${year}`;
+      case "EEEE, MMMM d, yyyy":
+        return `${dayNames[dayOfWeek]}, ${monthNames[month]} ${day}, ${year}`;
+      case "yyyy-MM-dd":
+        return `${year}-${padZero(month + 1)}-${padZero(day)}`;
+      case "EEE":
+        return shortDayNames[dayOfWeek];
+      case "d":
+        return day.toString();
+      case "Today":
+        return "Today";
     }
   
-    if (formatStr === "MMM d") {
-      return `${shortMonthNames[month]} ${day}`;
-    }
-    
-    if (formatStr === "PP") {
-      return `${monthNames[month]} ${day}, ${year}`;
-    }
-    
-    if (formatStr === "PPP") {
-      return `${dayNames[dayOfWeek]}, ${monthNames[month]} ${day}, ${year}`;
-    }
-    
-    // For "Today" just return it as is
-    if (formatStr === "Today") {
-      return "Today";
-    }
-    
-    // For custom formats, use a safer approach with sequential replacements
-    // This helps prevent conflicts between token replacements
+    // Custom format replacements
     let result = formatStr;
-    
-    // Year
-    result = result.replace(/yyyy/g, year.toString());
-    result = result.replace(/yy/g, year.toString().slice(-2));
-    
-    // Month as text (replace first to avoid conflicts)
-    result = result.replace(/MMMM/g, monthNames[month]);
-    result = result.replace(/MMM/g, shortMonthNames[month]);
-    
-    // Month as number
-    result = result.replace(/MM/g, padZero(month + 1));
-    result = result.replace(/M(?![a-zA-Z])/g, (month + 1).toString());
-    
-    // Day of Month
-    result = result.replace(/dd/g, padZero(day));
-    result = result.replace(/d(?![a-zA-Z])/g, day.toString());
-    
-    // Day of Week
-    result = result.replace(/EEEE/g, dayNames[dayOfWeek]);
-    result = result.replace(/EEE/g, shortDayNames[dayOfWeek]);
-    result = result.replace(/EE/g, shortDayNames[dayOfWeek]);
-    result = result.replace(/E/g, shortDayNames[dayOfWeek]);
-    
-    // AM/PM (replace after month to avoid conflicts)
-    result = result.replace(/a/g, hours24 < 12 ? 'am' : 'pm');
-    result = result.replace(/A/g, hours24 < 12 ? 'AM' : 'PM');
-    
-    // Hours
-    result = result.replace(/HH/g, padZero(hours24));
-    result = result.replace(/H/g, hours24.toString());
-    result = result.replace(/hh/g, padZero(hours12));
-    result = result.replace(/h(?![a-zA-Z])/g, hours12.toString());
-    
-    // Minutes
-    result = result.replace(/mm/g, padZero(minutes));
-    result = result.replace(/m(?![a-zA-Z])/g, minutes.toString());
-    
-    // Seconds
-    result = result.replace(/ss/g, padZero(seconds));
-    result = result.replace(/s(?![a-zA-Z])/g, seconds.toString());
-    
-    // Handle "do" format (1st, 2nd, 3rd, etc.)
-    result = result.replace(/do/g, (() => {
-      const suffix = ['th', 'st', 'nd', 'rd'];
-      const val = day % 100;
-      return day + (suffix[(val - 20) % 10] || suffix[val] || suffix[0]);
-    })());
-    
+  
+    // Replace larger patterns first to avoid conflicts
+    result = result
+      .replace(/yyyy/g, year.toString()) 
+      .replace(/yy/g, year.toString().slice(-2))
+      .replace(/MMMM/g, monthNames[month])
+      .replace(/MMM/g, shortMonthNames[month])
+      .replace(/MM/g, padZero(month + 1))
+      .replace(/M(?![a-zA-Z])/g, (month + 1).toString())
+      .replace(/dd/g, padZero(day))
+      .replace(/d(?![a-zA-Z])/g, day.toString())
+      .replace(/EEEE/g, dayNames[dayOfWeek])
+      .replace(/EEE/g, shortDayNames[dayOfWeek])
+      .replace(/EE/g, shortDayNames[dayOfWeek])
+      .replace(/E/g, shortDayNames[dayOfWeek])
+      .replace(/HH/g, padZero(hours24))
+      .replace(/H/g, hours24.toString())
+      .replace(/hh/g, padZero(hours12))
+      .replace(/h(?![a-zA-Z])/g, hours12.toString())
+      .replace(/mm/g, padZero(minutes))
+      .replace(/m(?![a-zA-Z])/g, minutes.toString())
+      .replace(/ss/g, padZero(seconds))
+      .replace(/s(?![a-zA-Z])/g, seconds.toString())
+      .replace(/a/g, hours24 < 12 ? 'am' : 'pm')
+      .replace(/A/g, hours24 < 12 ? 'AM' : 'PM')
+      .replace(/do/g, (() => {
+        const suffixes = ['th', 'st', 'nd', 'rd'];
+        const mod = day % 100;
+        return day + (suffixes[(mod - 20) % 10] || suffixes[mod] || suffixes[0]);
+      })());
+  
     return result;
   };
+  
+  // Example Usage:
+  console.log(formatDate(new Date(), "EEEE, MMMM d, yyyy"));
+  console.log(formatDate(new Date(), "yyyy-MM-dd"));
+  console.log(formatDate(new Date(), "h:mm A"));
+  
 
 // Day info type to store combined data for the calendar
 type DayInfo = {
