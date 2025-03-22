@@ -7,12 +7,16 @@ import { DatePicker } from "@mantine/dates"
 import { cn } from "@/lib/utils"
 import { buttonVariants } from "@/components/ui/button"
 
+interface CalendarProps extends Omit<React.ComponentProps<typeof DatePicker>, 'hideOutsideDates'> {
+  showOutsideDays?: boolean;
+}
+
 function Calendar({
   className,
   classNames,
   showOutsideDays = true,
   ...props
-}: React.ComponentProps<typeof DatePicker>) {
+}: CalendarProps) {
   return (
     <DatePicker
       hideOutsideDates={!showOutsideDays}
@@ -29,7 +33,6 @@ function Calendar({
         calendarHeaderControlPrev: "absolute left-1",
         calendarHeaderControlNext: "absolute right-1",
         monthThead: "w-full border-collapse space-x-1",
-        monthRow: "flex",
         weekdayCell:
           "text-muted-foreground rounded-md w-8 font-normal text-[0.8rem]",
         monthRow: "flex w-full mt-2",

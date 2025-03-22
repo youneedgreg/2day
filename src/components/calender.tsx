@@ -60,15 +60,10 @@ const isSameMonth = (date1: Date, date2: Date): boolean => {
   
   // You can keep using format from date-fns as it seems to be working correctly
   // If you need a custom format function, here's a simple version for common formats:
-  const formatDate = (date: Date, formatStr: string): string => {
-    // Helper functions for common formats
+  // Fixed formatDate function to correctly handle AM/PM and month names
+const formatDate = (date: Date, formatStr: string): string => {
+    // Helper functions
     const padZero = (num: number, targetLength: number = 2) => num.toString().padStart(targetLength, '0');
-    
-    // Day names and month names
-    const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-    const shortDayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-    const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
-    const shortMonthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
     
     // Date components
     const day = date.getDate();
@@ -79,20 +74,60 @@ const isSameMonth = (date1: Date, date2: Date): boolean => {
     const hours12 = hours24 % 12 || 12;
     const minutes = date.getMinutes();
     const seconds = date.getSeconds();
-    const milliseconds = date.getMilliseconds();
-    const ampm = hours24 < 12 ? 'am' : 'pm';
-    const AMPM = hours24 < 12 ? 'AM' : 'PM';
     
-    // Replace tokens with actual values
+    // Day names and month names
+    const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+    const shortDayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+    const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+    const shortMonthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    
+    // First, handle common format patterns to avoid regex replacement issues
+    if (formatStr === "h:mm A") {
+      return `${hours12}:${padZero(minutes)} ${hours24 < 12 ? 'AM' : 'PM'}`;
+    }
+    
+    if (formatStr === "h:mm A MMM d, yyyy") {
+      return `${hours12}:${padZero(minutes)} ${hours24 < 12 ? 'AM' : 'PM'} ${shortMonthNames[month]} ${day}, ${year}`;
+    }
+    
+    if (formatStr === "MMMM d, yyyy") {
+      return `${monthNames[month]} ${day}, ${year}`;
+    }
+    
+    if (formatStr === "MMM d, yyyy") {
+      return `${shortMonthNames[month]} ${day}, ${year}`;
+    }
+  
+    if (formatStr === "MMM d") {
+      return `${shortMonthNames[month]} ${day}`;
+    }
+    
+    if (formatStr === "PP") {
+      return `${monthNames[month]} ${day}, ${year}`;
+    }
+    
+    if (formatStr === "PPP") {
+      return `${dayNames[dayOfWeek]}, ${monthNames[month]} ${day}, ${year}`;
+    }
+    
+    // For "Today" just return it as is
+    if (formatStr === "Today") {
+      return "Today";
+    }
+    
+    // For custom formats, use a safer approach with sequential replacements
+    // This helps prevent conflicts between token replacements
     let result = formatStr;
     
     // Year
     result = result.replace(/yyyy/g, year.toString());
     result = result.replace(/yy/g, year.toString().slice(-2));
     
-    // Month
+    // Month as text (replace first to avoid conflicts)
     result = result.replace(/MMMM/g, monthNames[month]);
     result = result.replace(/MMM/g, shortMonthNames[month]);
+    
+    // Month as number
     result = result.replace(/MM/g, padZero(month + 1));
     result = result.replace(/M(?![a-zA-Z])/g, (month + 1).toString());
     
@@ -105,6 +140,10 @@ const isSameMonth = (date1: Date, date2: Date): boolean => {
     result = result.replace(/EEE/g, shortDayNames[dayOfWeek]);
     result = result.replace(/EE/g, shortDayNames[dayOfWeek]);
     result = result.replace(/E/g, shortDayNames[dayOfWeek]);
+    
+    // AM/PM (replace after month to avoid conflicts)
+    result = result.replace(/a/g, hours24 < 12 ? 'am' : 'pm');
+    result = result.replace(/A/g, hours24 < 12 ? 'AM' : 'PM');
     
     // Hours
     result = result.replace(/HH/g, padZero(hours24));
@@ -120,49 +159,13 @@ const isSameMonth = (date1: Date, date2: Date): boolean => {
     result = result.replace(/ss/g, padZero(seconds));
     result = result.replace(/s(?![a-zA-Z])/g, seconds.toString());
     
-    // Milliseconds
-    result = result.replace(/SSS/g, padZero(milliseconds, 3));
-    result = result.replace(/SS/g, padZero(Math.floor(milliseconds / 10)));
-    result = result.replace(/S/g, Math.floor(milliseconds / 100).toString());
-    
-    // AM/PM
-    result = result.replace(/a/g, ampm);
-    result = result.replace(/aa/g, ampm);
-    result = result.replace(/aaa/g, ampm);
-    result = result.replace(/aaaa/g, ampm);
-    result = result.replace(/A/g, AMPM);
-    result = result.replace(/AA/g, AMPM);
-    result = result.replace(/AAA/g, AMPM);
-    result = result.replace(/AAAA/g, AMPM);
-    
-    // Quarter
-    const quarter = Math.floor(month / 3) + 1;
-    result = result.replace(/QQQ/g, `Q${quarter}`);
-    result = result.replace(/QQ/g, `Q${quarter}`);
-    result = result.replace(/Q/g, quarter.toString());
-    
-    // Common format patterns
-    // Handle 'do' format (1st, 2nd, 3rd, etc.)
+    // Handle "do" format (1st, 2nd, 3rd, etc.)
     result = result.replace(/do/g, (() => {
       const suffix = ['th', 'st', 'nd', 'rd'];
       const val = day % 100;
       return day + (suffix[(val - 20) % 10] || suffix[val] || suffix[0]);
     })());
     
-    // Handle "PP" standard date format
-    if (result === "PP") {
-      return `${monthNames[month]} ${day}, ${year}`;
-    }
-  
-    // Handle "PPP" extended date format  
-    if (result === "PPP") {
-      return `${dayNames[dayOfWeek]}, ${monthNames[month]} ${day}, ${year}`;
-    }
-  
-    // Handle "p" and "pp" time formats
-    result = result.replace(/pp/g, `${padZero(hours12)}:${padZero(minutes)}:${padZero(seconds)} ${AMPM}`);
-    result = result.replace(/p/g, `${hours12}:${padZero(minutes)} ${AMPM}`);
-  
     return result;
   };
 
