@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { format, isToday, isTomorrow, isPast, differenceInDays,addDays } from "date-fns"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
@@ -51,12 +51,7 @@ export default function ActivityStream() {
   }, [])
   
   // Apply filters whenever they change
-  useEffect(() => {
-    if (!mounted) return
-    
-    applyFilters()
-  }, [activities, activityFilter, timelineFilter, searchQuery, mounted])
-  
+ 
   // Load all activities from storage
   const loadActivities = () => {
     const today = new Date()
@@ -173,7 +168,7 @@ export default function ActivityStream() {
   }
   
   // Apply filters to activities
-  const applyFilters = () => {
+  const applyFilters = useCallback(() => {
     let filtered = [...activities]
     
     // Apply activity type filter
@@ -195,7 +190,13 @@ export default function ActivityStream() {
     }
     
     setFilteredActivities(filtered)
-  }
+  }, [activities, activityFilter, timelineFilter, searchQuery])
+
+  useEffect(() => {
+    if (!mounted) return
+    
+    applyFilters()
+  }, [mounted, applyFilters])
   
   // Handle search input
   const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {

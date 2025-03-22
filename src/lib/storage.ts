@@ -37,8 +37,8 @@ export interface Note {
 // Storage keys
 const HABITS_KEY = "habits"
 const TODOS_KEY = "todos"
-const REMINDERS_KEY = "2day-reminders"
-const NOTES_KEY = "2day-notes"
+const REMINDERS_KEY = "reminders"
+const NOTES_KEY = "notes"
 
 // Generic storage functions
 function getFromStorage<T>(key: string): T[] {
