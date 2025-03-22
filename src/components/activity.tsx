@@ -1,13 +1,6 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
-import { 
-  format, 
-  isToday, 
-  isTomorrow, 
-  isPast, 
-  differenceInDays
-} from "date-fns"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
@@ -36,6 +29,156 @@ interface ActivityItem {
   urgency: "overdue" | "today" | "tomorrow" | "upcoming" | "future";
   daysUntil: number;
 }
+
+const formatDate = (date: Date, formatStr: string): string => {
+  // Helper functions for common formats
+  const padZero = (num: number, targetLength: number = 2) => num.toString().padStart(targetLength, '0');
+  
+  // Day names and month names
+  const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+  const shortDayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+  const shortMonthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  
+  // Date components
+  const day = date.getDate();
+  const dayOfWeek = date.getDay();
+  const month = date.getMonth();
+  const year = date.getFullYear();
+  const hours24 = date.getHours();
+  const hours12 = hours24 % 12 || 12;
+  const minutes = date.getMinutes();
+  const seconds = date.getSeconds();
+  const milliseconds = date.getMilliseconds();
+  const ampm = hours24 < 12 ? 'am' : 'pm';
+  const AMPM = hours24 < 12 ? 'AM' : 'PM';
+  
+  // Replace tokens with actual values
+  let result = formatStr;
+  
+  // Year
+  result = result.replace(/yyyy/g, year.toString());
+  result = result.replace(/yy/g, year.toString().slice(-2));
+  
+  // Month
+  result = result.replace(/MMMM/g, monthNames[month]);
+  result = result.replace(/MMM/g, shortMonthNames[month]);
+  result = result.replace(/MM/g, padZero(month + 1));
+  result = result.replace(/M(?![a-zA-Z])/g, (month + 1).toString());
+  
+  // Day of Month
+  result = result.replace(/dd/g, padZero(day));
+  result = result.replace(/d(?![a-zA-Z])/g, day.toString());
+  
+  // Day of Week
+  result = result.replace(/EEEE/g, dayNames[dayOfWeek]);
+  result = result.replace(/EEE/g, shortDayNames[dayOfWeek]);
+  result = result.replace(/EE/g, shortDayNames[dayOfWeek]);
+  result = result.replace(/E/g, shortDayNames[dayOfWeek]);
+  
+  // Hours
+  result = result.replace(/HH/g, padZero(hours24));
+  result = result.replace(/H/g, hours24.toString());
+  result = result.replace(/hh/g, padZero(hours12));
+  result = result.replace(/h(?![a-zA-Z])/g, hours12.toString());
+  
+  // Minutes
+  result = result.replace(/mm/g, padZero(minutes));
+  result = result.replace(/m(?![a-zA-Z])/g, minutes.toString());
+  
+  // Seconds
+  result = result.replace(/ss/g, padZero(seconds));
+  result = result.replace(/s(?![a-zA-Z])/g, seconds.toString());
+  
+  // Milliseconds
+  result = result.replace(/SSS/g, padZero(milliseconds, 3));
+  result = result.replace(/SS/g, padZero(Math.floor(milliseconds / 10)));
+  result = result.replace(/S/g, Math.floor(milliseconds / 100).toString());
+  
+  // AM/PM
+  result = result.replace(/a/g, ampm);
+  result = result.replace(/aa/g, ampm);
+  result = result.replace(/aaa/g, ampm);
+  result = result.replace(/aaaa/g, ampm);
+  result = result.replace(/A/g, AMPM);
+  result = result.replace(/AA/g, AMPM);
+  result = result.replace(/AAA/g, AMPM);
+  result = result.replace(/AAAA/g, AMPM);
+  
+  // Quarter
+  const quarter = Math.floor(month / 3) + 1;
+  result = result.replace(/QQQ/g, `Q${quarter}`);
+  result = result.replace(/QQ/g, `Q${quarter}`);
+  result = result.replace(/Q/g, quarter.toString());
+  
+  // Common format patterns
+  // Handle 'do' format (1st, 2nd, 3rd, etc.)
+  result = result.replace(/do/g, (() => {
+    const suffix = ['th', 'st', 'nd', 'rd'];
+    const val = day % 100;
+    return day + (suffix[(val - 20) % 10] || suffix[val] || suffix[0]);
+  })());
+  
+  // Handle "PP" standard date format
+  if (result === "PP") {
+    return `${monthNames[month]} ${day}, ${year}`;
+  }
+
+  // Handle "PPP" extended date format  
+  if (result === "PPP") {
+    return `${dayNames[dayOfWeek]}, ${monthNames[month]} ${day}, ${year}`;
+  }
+
+  // Handle "p" and "pp" time formats
+  result = result.replace(/pp/g, `${padZero(hours12)}:${padZero(minutes)}:${padZero(seconds)} ${AMPM}`);
+  result = result.replace(/p/g, `${hours12}:${padZero(minutes)} ${AMPM}`);
+
+  return result;
+};
+
+// Custom isToday implementation
+const isToday = (date: Date): boolean => {
+  const today = new Date();
+  return (
+    date.getDate() === today.getDate() &&
+    date.getMonth() === today.getMonth() &&
+    date.getFullYear() === today.getFullYear()
+  );
+};
+
+// Custom isTomorrow implementation
+const isTomorrow = (date: Date): boolean => {
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  return (
+    date.getDate() === tomorrow.getDate() &&
+    date.getMonth() === tomorrow.getMonth() &&
+    date.getFullYear() === tomorrow.getFullYear()
+  );
+};
+
+// Custom isPast implementation
+const isPast = (date: Date): boolean => {
+  return date < new Date();
+};
+
+// Custom differenceInDays implementation
+const differenceInDays = (dateLeft: Date, dateRight: Date): number => {
+  // Convert both dates to UTC to avoid DST issues
+  const utcDateLeft = Date.UTC(
+    dateLeft.getFullYear(),
+    dateLeft.getMonth(),
+    dateLeft.getDate()
+  );
+  const utcDateRight = Date.UTC(
+    dateRight.getFullYear(),
+    dateRight.getMonth(),
+    dateRight.getDate()
+  );
+  
+  // Calculate the difference and convert to days
+  return Math.floor((utcDateLeft - utcDateRight) / (1000 * 60 * 60 * 24));
+};
 
 // Define filter options
 type ActivityFilter = "all" | "habits" | "todos" | "reminders"
@@ -78,7 +221,7 @@ export default function ActivityStream() {
       // For habits, we'll look ahead 7 days
       for (let i = 0; i < 7; i++) {
         const date = addDaysToDate(today, i);
-        const dayOfWeek = format(date, "EEE")
+        const dayOfWeek = formatDate(date, "EEE")
         const formattedDayOfWeek = dayOfWeek === "Sun" ? "Sun" : 
                                   dayOfWeek === "Mon" ? "Mon" : 
                                   dayOfWeek === "Tue" ? "Tue" : 
@@ -88,7 +231,7 @@ export default function ActivityStream() {
         
         // If this habit is scheduled for this day
         if (habit.frequency.includes(formattedDayOfWeek)) {
-          const dateStr = format(date, "yyyy-MM-dd")
+          const dateStr = formatDate(date, "yyyy-MM-dd")
           const completed = habit.history.some(entry => entry.date === dateStr && entry.completed)
           
           let urgency: "overdue" | "today" | "tomorrow" | "upcoming" | "future" = "upcoming"
@@ -222,13 +365,13 @@ const applyFilters = useCallback(() => {
   // Format date for display
   const formatActivityDate = (date: Date) => {
     if (isToday(date)) {
-      return `Today, ${format(date, "h:mm a")}`
+      return `Today, ${formatDate(date, "h:mm a")}`
     } else if (isTomorrow(date)) {
-      return `Tomorrow, ${format(date, "h:mm a")}`
+      return `Tomorrow, ${formatDate(date, "h:mm a")}`
     } else if (differenceInDays(date, new Date()) < 7) {
-      return format(date, "EEEE, h:mm a") // Day of week
+      return formatDate(date, "EEEE, h:mm a") // Day of week
     } else {
-      return format(date, "MMM d, yyyy")
+      return formatDate(date, "MMM d, yyyy")
     }
   }
   
