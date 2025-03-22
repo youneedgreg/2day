@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from "react"
 import { motion } from "framer-motion"
-import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval, isSameMonth, isSameDay, addMonths, subMonths, addWeeks, subWeeks, addDays, subDays, isWithinInterval, parseISO } from "date-fns"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -22,6 +21,150 @@ import { getHabits, getTodos, getReminders, Habit, Todo, Reminder } from "@/lib/
 
 // View types
 type CalendarView = "year" | "month" | "week" | "day"
+
+// Custom isSameMonth implementation
+const isSameMonth = (date1: Date, date2: Date): boolean => {
+    return date1.getFullYear() === date2.getFullYear() && 
+           date1.getMonth() === date2.getMonth();
+  };
+  
+  // Custom isSameDay implementation
+  const isSameDay = (date1: Date, date2: Date): boolean => {
+    return date1.getFullYear() === date2.getFullYear() && 
+           date1.getMonth() === date2.getMonth() &&
+           date1.getDate() === date2.getDate();
+  };
+  
+  // Custom eachDayOfInterval implementation
+  const eachDayOfInterval = ({ start, end }: { start: Date, end: Date }): Date[] => {
+    const days: Date[] = [];
+    const currentDate = new Date(start);
+    
+    while (currentDate <= end) {
+      days.push(new Date(currentDate));
+      currentDate.setDate(currentDate.getDate() + 1);
+    }
+    
+    return days;
+  };
+  
+  // Custom isWithinInterval implementation
+  const isWithinInterval = (date: Date, { start, end }: { start: Date, end: Date }): boolean => {
+    return date >= start && date <= end;
+  };
+  
+  // Custom parseISO implementation
+  const parseISO = (dateString: string): Date => {
+    return new Date(dateString);
+  };
+  
+  // You can keep using format from date-fns as it seems to be working correctly
+  // If you need a custom format function, here's a simple version for common formats:
+  const formatDate = (date: Date, formatStr: string): string => {
+    // Helper functions for common formats
+    const padZero = (num: number, targetLength: number = 2) => num.toString().padStart(targetLength, '0');
+    
+    // Day names and month names
+    const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+    const shortDayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+    const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+    const shortMonthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    
+    // Date components
+    const day = date.getDate();
+    const dayOfWeek = date.getDay();
+    const month = date.getMonth();
+    const year = date.getFullYear();
+    const hours24 = date.getHours();
+    const hours12 = hours24 % 12 || 12;
+    const minutes = date.getMinutes();
+    const seconds = date.getSeconds();
+    const milliseconds = date.getMilliseconds();
+    const ampm = hours24 < 12 ? 'am' : 'pm';
+    const AMPM = hours24 < 12 ? 'AM' : 'PM';
+    
+    // Replace tokens with actual values
+    let result = formatStr;
+    
+    // Year
+    result = result.replace(/yyyy/g, year.toString());
+    result = result.replace(/yy/g, year.toString().slice(-2));
+    
+    // Month
+    result = result.replace(/MMMM/g, monthNames[month]);
+    result = result.replace(/MMM/g, shortMonthNames[month]);
+    result = result.replace(/MM/g, padZero(month + 1));
+    result = result.replace(/M(?![a-zA-Z])/g, (month + 1).toString());
+    
+    // Day of Month
+    result = result.replace(/dd/g, padZero(day));
+    result = result.replace(/d(?![a-zA-Z])/g, day.toString());
+    
+    // Day of Week
+    result = result.replace(/EEEE/g, dayNames[dayOfWeek]);
+    result = result.replace(/EEE/g, shortDayNames[dayOfWeek]);
+    result = result.replace(/EE/g, shortDayNames[dayOfWeek]);
+    result = result.replace(/E/g, shortDayNames[dayOfWeek]);
+    
+    // Hours
+    result = result.replace(/HH/g, padZero(hours24));
+    result = result.replace(/H/g, hours24.toString());
+    result = result.replace(/hh/g, padZero(hours12));
+    result = result.replace(/h(?![a-zA-Z])/g, hours12.toString());
+    
+    // Minutes
+    result = result.replace(/mm/g, padZero(minutes));
+    result = result.replace(/m(?![a-zA-Z])/g, minutes.toString());
+    
+    // Seconds
+    result = result.replace(/ss/g, padZero(seconds));
+    result = result.replace(/s(?![a-zA-Z])/g, seconds.toString());
+    
+    // Milliseconds
+    result = result.replace(/SSS/g, padZero(milliseconds, 3));
+    result = result.replace(/SS/g, padZero(Math.floor(milliseconds / 10)));
+    result = result.replace(/S/g, Math.floor(milliseconds / 100).toString());
+    
+    // AM/PM
+    result = result.replace(/a/g, ampm);
+    result = result.replace(/aa/g, ampm);
+    result = result.replace(/aaa/g, ampm);
+    result = result.replace(/aaaa/g, ampm);
+    result = result.replace(/A/g, AMPM);
+    result = result.replace(/AA/g, AMPM);
+    result = result.replace(/AAA/g, AMPM);
+    result = result.replace(/AAAA/g, AMPM);
+    
+    // Quarter
+    const quarter = Math.floor(month / 3) + 1;
+    result = result.replace(/QQQ/g, `Q${quarter}`);
+    result = result.replace(/QQ/g, `Q${quarter}`);
+    result = result.replace(/Q/g, quarter.toString());
+    
+    // Common format patterns
+    // Handle 'do' format (1st, 2nd, 3rd, etc.)
+    result = result.replace(/do/g, (() => {
+      const suffix = ['th', 'st', 'nd', 'rd'];
+      const val = day % 100;
+      return day + (suffix[(val - 20) % 10] || suffix[val] || suffix[0]);
+    })());
+    
+    // Handle "PP" standard date format
+    if (result === "PP") {
+      return `${monthNames[month]} ${day}, ${year}`;
+    }
+  
+    // Handle "PPP" extended date format  
+    if (result === "PPP") {
+      return `${dayNames[dayOfWeek]}, ${monthNames[month]} ${day}, ${year}`;
+    }
+  
+    // Handle "p" and "pp" time formats
+    result = result.replace(/pp/g, `${padZero(hours12)}:${padZero(minutes)}:${padZero(seconds)} ${AMPM}`);
+    result = result.replace(/p/g, `${hours12}:${padZero(minutes)} ${AMPM}`);
+  
+    return result;
+  };
 
 // Day info type to store combined data for the calendar
 type DayInfo = {
@@ -58,6 +201,59 @@ type DayInfo = {
   };
   hasItems: boolean;
 }
+
+// Custom date utility functions
+const addDaysToDate = (date: Date, days: number): Date => {
+    const result = new Date(date);
+    result.setDate(result.getDate() + days);
+    return result;
+  };
+  
+  const addMonthsToDate = (date: Date, months: number): Date => {
+    const result = new Date(date);
+    result.setMonth(result.getMonth() + months);
+    return result;
+  };
+  
+  const subMonthsFromDate = (date: Date, months: number): Date => {
+    const result = new Date(date);
+    result.setMonth(result.getMonth() - months);
+    return result;
+  };
+  
+  const addWeeksToDate = (date: Date, weeks: number): Date => {
+    return addDaysToDate(date, weeks * 7);
+  };
+  
+  const subWeeksFromDate = (date: Date, weeks: number): Date => {
+    return addDaysToDate(date, weeks * -7);
+  };
+  
+  const subDaysFromDate = (date: Date, days: number): Date => {
+    return addDaysToDate(date, -days);
+  };
+  
+  const startOfMonthDate = (date: Date): Date => {
+    return new Date(date.getFullYear(), date.getMonth(), 1);
+  };
+  
+  const endOfMonthDate = (date: Date): Date => {
+    return new Date(date.getFullYear(), date.getMonth() + 1, 0);
+  };
+  
+  const startOfWeekDate = (date: Date): Date => {
+    const result = new Date(date);
+    const day = result.getDay();
+    result.setDate(result.getDate() - day);
+    return result;
+  };
+  
+  const endOfWeekDate = (date: Date): Date => {
+    const result = new Date(date);
+    const day = result.getDay();
+    result.setDate(result.getDate() + (6 - day));
+    return result;
+  };
 
 export default function Calendar() {
   // State for calendar view and date
@@ -105,13 +301,13 @@ export default function Calendar() {
         break
       case "month":
         // For month view, we'll show the entire month with padding for weeks
-        start = startOfWeek(startOfMonth(currentDate))
-        end = endOfWeek(endOfMonth(currentDate))
+        start = startOfWeekDate(startOfMonthDate(currentDate))
+        end = endOfWeekDate(endOfMonthDate(currentDate))
         break
       case "week":
         // For week view, we'll show the current week
-        start = startOfWeek(currentDate)
-        end = endOfWeek(currentDate)
+        start = startOfWeekDate(currentDate)
+        end = endOfWeekDate(currentDate)
         break
       case "day":
         // For day view, we'll show just the selected day
@@ -119,8 +315,8 @@ export default function Calendar() {
         end = currentDate
         break
       default:
-        start = startOfWeek(startOfMonth(currentDate))
-        end = endOfWeek(endOfMonth(currentDate))
+        start = startOfWeekDate(startOfMonthDate(currentDate))
+        end = endOfWeekDate(endOfMonthDate(currentDate))
     }
     
     // Generate array of days in the range
@@ -128,13 +324,13 @@ export default function Calendar() {
     
     // Map each day to include relevant data
     const days: DayInfo[] = daysInRange.map(date => {
-      const dateStr = format(date, "yyyy-MM-dd")
+      const dateStr = formatDate(date, "yyyy-MM-dd")
       const isCurrentMonth = isSameMonth(date, currentDate)
       const isToday = isSameDay(date, new Date())
       
       // Filter habits for this day
       const dayHabits = habits.filter(habit => {
-        const dayOfWeek = format(date, "EEE")
+        const dayOfWeek = formatDate(date, "EEE")
         const formattedDayOfWeek = dayOfWeek === "Sun" ? "Sun" : 
                                    dayOfWeek === "Mon" ? "Mon" : 
                                    dayOfWeek === "Tue" ? "Tue" : 
@@ -219,13 +415,13 @@ export default function Calendar() {
         setCurrentDate(date => new Date(date.getFullYear() - 1, date.getMonth(), 1))
         break
       case "month":
-        setCurrentDate(date => subMonths(date, 1))
+        setCurrentDate(date => subMonthsFromDate(date, 1))
         break
       case "week":
-        setCurrentDate(date => subWeeks(date, 1))
+        setCurrentDate(date => subWeeksFromDate(date, 1))
         break
       case "day":
-        setCurrentDate(date => subDays(date, 1))
+        setCurrentDate(date => subDaysFromDate(date, 1))
         break
     }
   }
@@ -236,13 +432,13 @@ export default function Calendar() {
         setCurrentDate(date => new Date(date.getFullYear() + 1, date.getMonth(), 1))
         break
       case "month":
-        setCurrentDate(date => addMonths(date, 1))
+        setCurrentDate(date => addMonthsToDate(date, 1))
         break
       case "week":
-        setCurrentDate(date => addWeeks(date, 1))
+        setCurrentDate(date => addWeeksToDate(date, 1))
         break
       case "day":
-        setCurrentDate(date => addDays(date, 1))
+        setCurrentDate(date => addDaysToDate(date, 1))
         break
     }
   }
@@ -275,8 +471,8 @@ export default function Calendar() {
       <div className="grid grid-cols-3 md:grid-cols-4 gap-4">
         {months.map(month => {
           // Calculate completion stats for this month
-          const monthStart = startOfMonth(month)
-          const monthEnd = endOfMonth(month)
+          const monthStart = startOfMonthDate(month)
+          const monthEnd = endOfMonthDate(month)
           const daysInMonth = calendarDays.filter(day => 
             isWithinInterval(day.date, { start: monthStart, end: monthEnd })
           )
@@ -302,7 +498,7 @@ export default function Calendar() {
             >
               <CardHeader className="p-3 pb-0 border-b">
                 <CardTitle className="text-sm font-medium">
-                  {format(month, "MMMM")}
+                  {formatDate(month, "MMMM")}
                 </CardTitle>
               </CardHeader>
               <CardContent className="p-3">
@@ -375,7 +571,7 @@ export default function Calendar() {
             >
               {/* Date number */}
               <div className="text-xs font-medium">
-                {format(day.date, "d")}
+                {formatDate(day.date, "d")}
               </div>
               
               {/* Indicators */}
@@ -431,10 +627,10 @@ export default function Calendar() {
               className={`py-2 rounded-md ${day.isToday ? 'bg-primary text-primary-foreground' : ''}`}
             >
               <div className="text-xs font-medium">
-                {format(day.date, "EEE")}
+                {formatDate(day.date, "EEE")}
               </div>
               <div className="text-lg">
-                {format(day.date, "d")}
+                {formatDate(day.date, "d")}
               </div>
             </div>
           ))}
@@ -553,7 +749,7 @@ export default function Calendar() {
         {/* Day header */}
         <div className="text-center">
           <h3 className="text-xl font-bold">
-            {format(selectedDate, "EEEE, MMMM d, yyyy")}
+            {formatDate(selectedDate, "EEEE, MMMM d, yyyy")}
           </h3>
         </div>
         
@@ -745,10 +941,10 @@ export default function Calendar() {
           
           {/* Current period display */}
           <div className="font-medium text-sm min-w-24 text-center">
-            {view === "year" && format(currentDate, "yyyy")}
-            {view === "month" && format(currentDate, "MMMM yyyy")}
-            {view === "week" && `Week of ${format(calendarDays[0]?.date || currentDate, "MMM d")}`}
-            {view === "day" && format(currentDate, "MMMM d, yyyy")}
+            {view === "year" && formatDate(currentDate, "yyyy")}
+            {view === "month" && formatDate(currentDate, "MMMM yyyy")}
+            {view === "week" && `Week of ${formatDate(calendarDays[0]?.date || currentDate, "MMM d")}`}
+            {view === "day" && formatDate(currentDate, "MMMM d, yyyy")}
           </div>
           
           {/* View selector */}
