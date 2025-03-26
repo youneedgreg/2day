@@ -133,8 +133,9 @@ Made with ❤️ for productivity enthusiastss
 
 
 ## implement
+dashboard cards
 reminder cards
-habit tracker calender 
+habit tracker calender view
 todos, reminders tabs for all, upcomming and today
 to do priorities and stuff
 to-do ident
@@ -152,7 +153,8 @@ calender activity loader.
 collaboration
 auth
 storage
-chat 
+chat
+emails and text notifications.
 floating ai
 auth
 vision board
