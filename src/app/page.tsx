@@ -22,7 +22,9 @@ import {
   BarChart3, 
   Sun, 
   Calendar as CalendarIcon,
-  Moon 
+  Moon, 
+  ActivityIcon,
+  CalendarCheck
 } from "lucide-react"
 
 export default function Home() {
@@ -232,6 +234,12 @@ export default function Home() {
                     <BarChart3 className="h-5 w-5" />
                   </TabsTrigger>
                   <TabsTrigger 
+                    value="activity" 
+                    className="flex-1 flex items-center justify-center py-3"
+                  >
+                    <ActivityIcon className="h-5 w-5" />
+                  </TabsTrigger>
+                  <TabsTrigger 
                     value="habits" 
                     className="flex-1 flex items-center justify-center py-3"
                   >
@@ -254,6 +262,12 @@ export default function Home() {
                     className="flex-1 flex items-center justify-center py-3"
                   >
                     <StickyNote className="h-5 w-5" />
+                  </TabsTrigger>
+                  <TabsTrigger 
+                    value="calender" 
+                    className="flex-1 flex items-center justify-center py-3"
+                  >
+                    <CalendarCheck className="h-5 w-5" />
                   </TabsTrigger>
                 </TabsList>
               </motion.div>
