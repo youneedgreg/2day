@@ -7,11 +7,14 @@ import {
   CircleX, 
   CheckCheck, 
   Calendar, 
-  Clock 
+  Clock, 
+  StickyNote,
+  Activity,
+  Calendar1
 } from "lucide-react"
 
 type LoaderSize = "small" | "default" | "large"
-type LoaderType = "habit" | "todo" | "reminder" | "neutral"
+type LoaderType = "habit" | "todo" | "reminder" | "neutral" | "notes" | "activity" | "calender"
 type HabitType = "build" | "quit"
 
 interface ProductivityLoaderProps {
@@ -53,6 +56,9 @@ const ProductivityLoader: React.FC<ProductivityLoaderProps> = ({
     habit: habitType === "build" ? "text-green-500" : "text-red-500",
     todo: "text-blue-500",
     reminder: "text-amber-500",
+    notes: "text-amber-500",
+    activity: "text-green-500",
+    calender: "text-blue-500",
     neutral: "text-primary"
   }
   
@@ -61,6 +67,9 @@ const ProductivityLoader: React.FC<ProductivityLoaderProps> = ({
     habit: habitType === "build" ? "bg-green-100 dark:bg-green-900/20" : "bg-red-100 dark:bg-red-900/20",
     todo: "bg-blue-100 dark:bg-blue-900/20",
     reminder: "bg-amber-100 dark:bg-amber-900/20",
+    notes: "bg-amber-100 dark:bg-amber-900/20",
+    activity: "bg-green-100 dark:bg-green-900/20",
+    calender: "bg-blue-100 dark:bg-blue-900/20",
     neutral: "bg-primary/10"
   }
 
@@ -73,6 +82,13 @@ const ProductivityLoader: React.FC<ProductivityLoaderProps> = ({
         return <CheckCheck className="w-full h-full" />
       case "reminder":
         return <Clock className="w-full h-full" />
+      case "notes":
+        return <StickyNote className="w-full h-full" />
+      case "activity":
+        return <Activity className="w-full h-full" />
+      case "calender":
+        return <Calendar1 className="w-full h-full" />
+
       default:
         return <Calendar className="w-full h-full" />
     }
@@ -97,6 +113,9 @@ const ProductivityLoader: React.FC<ProductivityLoaderProps> = ({
     habit: habitType === "build" ? "Building habits..." : "Breaking habits...",
     todo: "Loading tasks...",
     reminder: "Loading reminders...",
+    notes: "Loading notes...",
+    activity: "Loading activities...",
+    calender: "Loading calender...",
     neutral: "Loading..."
   }
 

@@ -264,10 +264,12 @@ export default function Home() {
           {contentLoading ? (
             <div className="flex justify-center items-center py-20">
               {activeTab === "dashboard" && <ProductivityLoader type="neutral" size="large" showText text="Loading dashboard..." />}
+              {activeTab === "activity" && <ProductivityLoader type="activity" size="large" showText text="Loading activities..." />}
               {activeTab === "habits" && <ProductivityLoader type="habit" habitType="build" size="large" showText text="Loading habits..." />}
               {activeTab === "todos" && <ProductivityLoader type="todo" size="large" showText text="Loading todos..." />}
               {activeTab === "reminders" && <ProductivityLoader type="reminder" size="large" showText text="Loading reminders..." />}
-              {activeTab === "notes" && <ProductivityLoader type="neutral" size="large" showText text="Loading notes..." />}
+              {activeTab === "notes" && <ProductivityLoader type="notes" size="large" showText text="Loading notes..." />}
+              {activeTab === "calendar" && <ProductivityLoader type="calender" size="large" showText text="Loading calender..."/>}
             </div>
           ) : (
             <AnimatePresence mode="wait">
