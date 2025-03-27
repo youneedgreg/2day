@@ -134,14 +134,14 @@ Made with ❤️ for productivity enthusiastss
 
 ## implement
 dashboard cards
-reminder cards
 note bug formatting
+streak count card dashboard
+reset streak count
 bugs
 
 
 
 collaboration
-auth
 storage
 chat
 emails and text notifications.
