@@ -135,11 +135,8 @@ Made with ❤️ for productivity enthusiastss
 ## implement
 dashboard cards
 reminder cards
-reminders priorities and stuff
 to-do ident
-to do commands
 to do timer
-to do due date
 note formatting
 to do notes
 to -do view...inspo from today
