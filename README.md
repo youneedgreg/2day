@@ -136,7 +136,6 @@ Made with ❤️ for productivity enthusiastss
 dashboard cards
 reminder cards
 note formatting
-reminders spaces
 bugs
 
 
