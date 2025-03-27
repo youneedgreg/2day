@@ -135,7 +135,7 @@ Made with ❤️ for productivity enthusiastss
 ## implement
 dashboard cards
 reminder cards
-note formatting
+note bug formatting
 bugs
 
 

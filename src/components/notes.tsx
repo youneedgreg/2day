@@ -103,6 +103,9 @@ const RichTextEditor = ({
       editorRef.current.innerHTML = initialValue || ''
       // Make it editable
       editorRef.current.contentEditable = 'true'
+      // Ensure left-to-right text direction
+      editorRef.current.dir = 'ltr'
+      editorRef.current.style.direction = 'ltr'
     }
   }, [initialValue])
   
@@ -329,11 +332,12 @@ const RichTextEditor = ({
       </div>
       
       <div
-        ref={editorRef}
-        className="min-h-40 p-3 border rounded-md overflow-auto focus:outline-none focus:ring-2 focus:ring-primary focus:ring-opacity-50"
-        style={{ fontFamily, fontSize, backgroundColor }}
-        onInput={handleInput}
-      />
+  ref={editorRef}
+  className="min-h-40 p-3 border rounded-md overflow-auto focus:outline-none focus:ring-2 focus:ring-primary focus:ring-opacity-50"
+  style={{ fontFamily, fontSize, backgroundColor, direction: 'ltr' }}
+  onInput={handleInput}
+  dir="ltr"
+/>
     </div>
   )
 }
@@ -675,7 +679,7 @@ export default function Notes() {
         transition={{ duration: 0.3 }}
       >
         <div className="flex items-center gap-2">
-          <h2 className="text-2xl font-bold">Enhanced Notes</h2>
+          <h2 className="text-2xl font-bold">Notes</h2>
           <motion.div
             initial={{ rotate: 0 }}
             animate={{ rotate: [0, 15, 0, -15, 0] }}
