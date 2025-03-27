@@ -1,22 +1,30 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 "use client"
 
 import { useState, useEffect } from "react"
 import { motion } from "framer-motion"
-import { Plus, Trash2, Calendar, Bell, AlertCircle, CheckCircle } from "lucide-react"
+import { Plus, Trash2, Calendar, Bell, AlertCircle, CheckCircle, Flag } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Badge } from "@/components/ui/badge"
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
 // Define types
+type Priority = "low" | "medium" | "high"
+
 type Reminder = {
   id: string
   text: string
   date: string
   completed: boolean
   createdAt: string
+  priority: Priority
 }
 
 // Helper functions
@@ -36,7 +44,14 @@ const getRemindersFromLocalStorage = (): Reminder[] => {
   try {
     const parsedReminders = JSON.parse(storedReminders)
     console.log('Successfully parsed reminders:', parsedReminders)
-    return Array.isArray(parsedReminders) ? parsedReminders : []
+    
+    // Handle migration from old format without priority
+    const migratedReminders = parsedReminders.map((reminder: any) => ({
+      ...reminder,
+      priority: reminder.priority || "medium" // Default to medium if no priority exists
+    }))
+    
+    return Array.isArray(migratedReminders) ? migratedReminders : []
   } catch (error) {
     console.error('Error parsing reminders from localStorage:', error)
     return []
@@ -79,7 +94,14 @@ export default function Reminders() {
         try {
           const parsed = JSON.parse(storedReminders)
           console.log('Initially loaded reminders:', parsed)
-          return Array.isArray(parsed) ? parsed : []
+          
+          // Handle migration from old format without priority
+          const migratedReminders = parsed.map((reminder: any) => ({
+            ...reminder,
+            priority: reminder.priority || "medium" // Default to medium if no priority exists
+          }))
+          
+          return Array.isArray(migratedReminders) ? migratedReminders : []
         } catch (error) {
           console.error('Error parsing initial reminders:', error)
         }
@@ -90,7 +112,9 @@ export default function Reminders() {
   
   const [newReminderText, setNewReminderText] = useState("")
   const [newReminderDate, setNewReminderDate] = useState("")
+  const [newReminderPriority, setNewReminderPriority] = useState<Priority>("medium")
   const [dialogOpen, setDialogOpen] = useState(false)
+  const [activeFilter, setActiveFilter] = useState("all")
 
   // Backup loading from localStorage on component mount
   useEffect(() => {
@@ -122,11 +146,13 @@ export default function Reminders() {
       date: newReminderDate,
       completed: false,
       createdAt: new Date().toISOString(),
+      priority: newReminderPriority
     }
 
     setReminders([...reminders, reminder])
     setNewReminderText("")
     setNewReminderDate("")
+    setNewReminderPriority("medium")
     setDialogOpen(false)
   }
 
@@ -140,10 +166,41 @@ export default function Reminders() {
     setReminders(reminders.filter((reminder) => reminder.id !== id))
   }
 
-  // Sort reminders by date (upcoming first)
-  const sortedReminders = [...reminders].sort((a, b) => {
+  const updateReminderPriority = (id: string, priority: Priority) => {
+    setReminders(
+      reminders.map((reminder) => (reminder.id === id ? { ...reminder, priority } : reminder))
+    )
+  }
+
+  // Filter reminders based on active tab
+  const filteredReminders = reminders.filter(reminder => {
+    if (activeFilter === "all") return true
+    if (activeFilter === "completed") return reminder.completed
+    if (activeFilter === "active") return !reminder.completed
+    
+    // Priority filters
+    if (activeFilter === "high") return reminder.priority === "high" && !reminder.completed
+    if (activeFilter === "medium") return reminder.priority === "medium" && !reminder.completed
+    if (activeFilter === "low") return reminder.priority === "low" && !reminder.completed
+    
+    return true
+  })
+
+  // Sort reminders by priority, then date
+  const sortedReminders = [...filteredReminders].sort((a, b) => {
+    // First sort by completion status
     if (a.completed && !b.completed) return 1
     if (!a.completed && b.completed) return -1
+    
+    // For non-completed items, sort by priority 
+    if (!a.completed && !b.completed) {
+      const priorityOrder = { high: 0, medium: 1, low: 2 }
+      const priorityDiff = priorityOrder[a.priority] - priorityOrder[b.priority]
+      
+      if (priorityDiff !== 0) return priorityDiff
+    }
+    
+    // Then sort by date
     return new Date(a.date).getTime() - new Date(b.date).getTime()
   })
 
@@ -164,85 +221,24 @@ export default function Reminders() {
     return reminderDate < today
   }
 
-  // Debug function to log current state
-  const debugReminders = () => {
-    console.log('All reminders:', reminders)
-    console.log('Sorted reminders:', sortedReminders)
-    console.log('Are there reminders to show?', reminders.length > 0)
+  
+  const getPriorityBadgeVariant = (priority: Priority) => {
+    switch (priority) {
+      case "high": return "destructive"
+      case "medium": return "default"
+      case "low": return "secondary"
+      default: return "outline"
+    }
   }
 
-  // Call debug function
-  debugReminders()
-
-  // Debug component for development
-  const DebugPanel = () => {
-    const [localStorageContent, setLocalStorageContent] = useState<string>('Loading...')
-    
-    useEffect(() => {
-      if (typeof window !== 'undefined') {
-        const content = localStorage.getItem('reminders') || 'No reminders found'
-        setLocalStorageContent(content)
-      }
-    }, [reminders]) // Update when reminders change
-    
-    if (process.env.NODE_ENV !== 'development') {
-      return null // Only show in development
-    }
-    
-    return (
-      <div className="mt-6 p-4 border border-red-300 rounded bg-red-50 text-sm">
-        <h3 className="font-bold text-red-800 mb-2">Debug Information</h3>
-        <div className="mb-2">
-          <strong>Reminders in state:</strong> {reminders.length}
-        </div>
-        <div className="mb-2">
-          <strong>Sorted reminders:</strong> {sortedReminders.length}
-        </div>
-        <div>
-          <strong>LocalStorage content:</strong>
-          <pre className="mt-1 p-2 bg-white border rounded overflow-auto max-h-40 text-xs">
-            {localStorageContent}
-          </pre>
-        </div>
-        <div className="mt-4 flex gap-2">
-          <Button 
-            size="sm" 
-            variant="outline" 
-            onClick={() => console.log('Current reminders state:', reminders)}
-          >
-            Log State
-          </Button>
-          <Button 
-            size="sm" 
-            variant="outline" 
-            onClick={() => {
-              const today = new Date();
-              const testReminder = {
-                id: generateId(),
-                text: "Debug Test Reminder",
-                date: today.toISOString().split('T')[0],
-                completed: false,
-                createdAt: today.toISOString(),
-              };
-              setReminders(prev => [...prev, testReminder]);
-            }}
-          >
-            Add Test Reminder
-          </Button>
-          <Button 
-            size="sm" 
-            variant="destructive" 
-            onClick={() => {
-              localStorage.removeItem('reminders');
-              setReminders([]);
-              window.location.reload();
-            }}
-          >
-            Clear & Reload
-          </Button>
-        </div>
-      </div>
-    )
+  // Calculate counts for tabs
+  const remindersCount = {
+    all: reminders.length,
+    active: reminders.filter(r => !r.completed).length,
+    completed: reminders.filter(r => r.completed).length,
+    high: reminders.filter(r => r.priority === "high" && !r.completed).length,
+    medium: reminders.filter(r => r.priority === "medium" && !r.completed).length,
+    low: reminders.filter(r => r.priority === "low" && !r.completed).length,
   }
 
   return (
@@ -304,6 +300,46 @@ export default function Reminders() {
                   className="focus-visible:ring-primary"
                 />
               </div>
+              
+              <div className="space-y-2">
+                <Label className="flex items-center gap-2">
+                  <Flag className="h-4 w-4 text-muted-foreground" />
+                  Priority
+                </Label>
+                <RadioGroup 
+                  value={newReminderPriority} 
+                  onValueChange={(value) => setNewReminderPriority(value as Priority)}
+                  className="flex space-x-1"
+                >
+                  <div className="flex items-center space-x-1">
+                    <RadioGroupItem value="low" id="r-low" />
+                    <Label htmlFor="r-low" className="flex items-center gap-1 text-sm cursor-pointer">
+                      <span className="text-green-500">
+                        <Flag className="h-3 w-3 fill-green-500" />
+                      </span>
+                      Low
+                    </Label>
+                  </div>
+                  <div className="flex items-center space-x-1">
+                    <RadioGroupItem value="medium" id="r-medium" />
+                    <Label htmlFor="r-medium" className="flex items-center gap-1 text-sm cursor-pointer">
+                      <span className="text-amber-500">
+                        <Flag className="h-3 w-3 fill-amber-500" />
+                      </span>
+                      Medium
+                    </Label>
+                  </div>
+                  <div className="flex items-center space-x-1">
+                    <RadioGroupItem value="high" id="r-high" />
+                    <Label htmlFor="r-high" className="flex items-center gap-1 text-sm cursor-pointer">
+                      <span className="text-red-500">
+                        <Flag className="h-3 w-3 fill-red-500" />
+                      </span>
+                      High
+                    </Label>
+                  </div>
+                </RadioGroup>
+              </div>
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => setDialogOpen(false)}>
@@ -316,6 +352,40 @@ export default function Reminders() {
           </DialogContent>
         </Dialog>
       </motion.div>
+
+      {reminders.length > 0 && (
+        <Tabs defaultValue="all" value={activeFilter} onValueChange={setActiveFilter} className="w-full">
+          <TabsList className="w-full justify-start mb-4 overflow-x-auto flex-nowrap">
+            <TabsTrigger value="all" className="relative px-4">
+              All
+              <Badge variant="outline" className="ml-1">{remindersCount.all}</Badge>
+            </TabsTrigger>
+            <TabsTrigger value="active" className="relative px-4">
+              Active
+              <Badge variant="outline" className="ml-1">{remindersCount.active}</Badge>
+            </TabsTrigger>
+            <TabsTrigger value="completed" className="relative px-4">
+              Completed
+              <Badge variant="outline" className="ml-1">{remindersCount.completed}</Badge>
+            </TabsTrigger>
+            <TabsTrigger value="high" className="relative px-4">
+              <Flag className="h-3 w-3 mr-1 fill-red-500 text-red-500" />
+              High
+              <Badge variant="outline" className="ml-1">{remindersCount.high}</Badge>
+            </TabsTrigger>
+            <TabsTrigger value="medium" className="relative px-4">
+              <Flag className="h-3 w-3 mr-1 fill-amber-500 text-amber-500" />
+              Medium
+              <Badge variant="outline" className="ml-1">{remindersCount.medium}</Badge>
+            </TabsTrigger>
+            <TabsTrigger value="low" className="relative px-4">
+              <Flag className="h-3 w-3 mr-1 fill-green-500 text-green-500" />
+              Low
+              <Badge variant="outline" className="ml-1">{remindersCount.low}</Badge>
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
+      )}
 
       {reminders.length === 0 ? (
         <motion.div
@@ -341,6 +411,15 @@ export default function Reminders() {
             </motion.div>
           </div>
         </motion.div>
+      ) : sortedReminders.length === 0 ? (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.2 }}
+          className="text-center py-12 border rounded-lg bg-muted/20"
+        >
+          <p className="text-muted-foreground">No reminders match the current filter.</p>
+        </motion.div>
       ) : (
         <div className="space-y-2">
           {sortedReminders.map((reminder) => (
@@ -350,6 +429,9 @@ export default function Reminders() {
                 overflow-hidden transition-all duration-200 hover:shadow-md
                 ${reminder.completed ? "bg-muted/30" : ""}
                 ${!reminder.completed && isOverdue(reminder.date) ? "border-red-500 dark:border-red-700" : ""}
+                ${!reminder.completed && reminder.priority === "high" ? "border-l-4 border-l-red-500" : ""}
+                ${!reminder.completed && reminder.priority === "medium" ? "border-l-4 border-l-amber-500" : ""}
+                ${!reminder.completed && reminder.priority === "low" ? "border-l-4 border-l-green-500" : ""}
               `}
             >
               <CardContent className="p-4 flex items-center justify-between">
@@ -372,6 +454,12 @@ export default function Reminders() {
                         <Calendar className="h-3 w-3" />
                         {formatDate(reminder.date)}
                       </span>
+                      {!reminder.completed && (
+                        <Badge variant={getPriorityBadgeVariant(reminder.priority)} className="text-xs px-1.5 py-0">
+                          <Flag className={`h-3 w-3 mr-0.5 ${reminder.priority === "high" ? "fill-current" : ""}`} />
+                          {reminder.priority.charAt(0).toUpperCase() + reminder.priority.slice(1)}
+                        </Badge>
+                      )}
                       {!reminder.completed && isOverdue(reminder.date) && (
                         <span className="text-red-500 dark:text-red-400 flex items-center gap-1">
                           <AlertCircle className="h-3 w-3" />
@@ -387,17 +475,40 @@ export default function Reminders() {
                     </div>
                   </div>
                 </div>
-                <Button variant="ghost" size="icon" onClick={() => deleteReminder(reminder.id)}>
-                  <Trash2 className="h-4 w-4" />
-                </Button>
+                <div className="flex items-center gap-2">
+                  {!reminder.completed && (
+                    <Select 
+                      value={reminder.priority}
+                      onValueChange={(value) => updateReminderPriority(reminder.id, value as Priority)}
+                    >
+                      <SelectTrigger className="w-20 h-7 text-xs">
+                        <SelectValue placeholder="Priority" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="low" className="text-xs flex items-center gap-1">
+                          <Flag className="h-3 w-3 text-green-500 fill-green-500" />
+                          Low
+                        </SelectItem>
+                        <SelectItem value="medium" className="text-xs flex items-center gap-1">
+                          <Flag className="h-3 w-3 text-amber-500 fill-amber-500" />
+                          Medium
+                        </SelectItem>
+                        <SelectItem value="high" className="text-xs flex items-center gap-1">
+                          <Flag className="h-3 w-3 text-red-500 fill-red-500" />
+                          High
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                  )}
+                  <Button variant="ghost" size="icon" onClick={() => deleteReminder(reminder.id)}>
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
               </CardContent>
             </Card>
           ))}
         </div>
       )}
-      
-      {/* Debug panel - only shows in development */}
-      {process.env.NODE_ENV === 'development' && <DebugPanel />}
     </div>
   )
 }

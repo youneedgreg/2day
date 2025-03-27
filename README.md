@@ -135,9 +135,7 @@ Made with ❤️ for productivity enthusiastss
 ## implement
 dashboard cards
 reminder cards
-habit tracker calender view
-todos, reminders tabs for all, upcomming and today
-to do priorities and stuff
+reminders priorities and stuff
 to-do ident
 to do commands
 to do timer
@@ -146,9 +144,7 @@ note formatting
 to do notes
 to -do view...inspo from today
 to do spaces
-intro to apps
-mobile tabs
-habit reminder
+
 
 
 collaboration
@@ -160,8 +156,10 @@ floating ai
 auth
 vision board
 goals
+intro to apps
 inspiration
 grow your virtual tree
 voice memos
 attachment on notes
 ai intergration
+ai reminder
