@@ -103,37 +103,39 @@ export default function Home() {
   ]
 
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="h-screen flex flex-col">
       {/* Add Navbar at the top */}
       <Navbar />
 
-      <div className="flex flex-1 flex-col md:flex-row">
-        {/* Side Panel for Desktop */}
+      <div className="flex flex-1 overflow-hidden">
+        {/* Side Panel for Desktop - Fixed position, not scrollable */}
         {!isMobile && (
           <motion.div 
             initial={{ x: -50, opacity: 0 }}
             animate={{ x: 0, opacity: 1 }}
-            className={`w-64 p-6 flex-shrink-0 flex flex-col border-r ${theme === 'dark' ? 'bg-gray-900 border-gray-800' : 'bg-gray-50 border-gray-200'}`}
+            className={`w-64 flex-shrink-0 flex flex-col border-r h-full overflow-y-auto ${theme === 'dark' ? 'bg-gray-900 border-gray-800' : 'bg-gray-50 border-gray-200'}`}
           >
-            <div className="flex items-center gap-2 mb-8">
-              <motion.div
-                whileHover={{ rotate: 10, scale: 1.1 }}
-                transition={{ type: "spring", stiffness: 400, damping: 10 }}
-              >
-                <Image
-                  src="/logo.png"
-                  alt="2day Logo"
-                  width={32}
-                  height={32}
-                  className="h-8 w-8"
-                />
-              </motion.div>
-              <h1 className="text-2xl font-bold bg-gradient-to-r from-primary to-purple-500 bg-clip-text text-transparent">
-                2day
-              </h1>
+            <div className="p-6 flex-shrink-0">
+              <div className="flex items-center gap-2 mb-8">
+                <motion.div
+                  whileHover={{ rotate: 10, scale: 1.1 }}
+                  transition={{ type: "spring", stiffness: 400, damping: 10 }}
+                >
+                  <Image
+                    src="/logo.png"
+                    alt="2day Logo"
+                    width={32}
+                    height={32}
+                    className="h-8 w-8"
+                  />
+                </motion.div>
+                <h1 className="text-2xl font-bold bg-gradient-to-r from-primary to-purple-500 bg-clip-text text-transparent">
+                  2day
+                </h1>
+              </div>
             </div>
             
-            <nav className="flex-1 space-y-1">
+            <nav className="flex-1 overflow-y-auto p-6 pt-0 space-y-1">
               {navItems.map((item) => (
                 <button
                   key={item.value}
@@ -150,37 +152,40 @@ export default function Home() {
               ))}
             </nav>
             
-            <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={toggleTheme}
-              className={`mt-auto p-3 rounded-lg flex items-center gap-3 ${theme === 'dark' ? 'bg-gray-800 hover:bg-gray-700' : 'bg-gray-100 hover:bg-gray-200'}`}
-            >
-              {theme === "light" ? (
-                <>
-                  <Moon className="h-5 w-5" />
-                  <span>Dark Mode</span>
-                </>
-              ) : (
-                <>
-                  <Sun className="h-5 w-5" />
-                  <span>Light Mode</span>
-                </>
-              )}
-            </motion.button>
+            <div className="p-6 flex-shrink-0">
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={toggleTheme}
+                className={`w-full p-3 rounded-lg flex items-center gap-3 ${theme === 'dark' ? 'bg-gray-800 hover:bg-gray-700' : 'bg-gray-100 hover:bg-gray-200'}`}
+              >
+                {theme === "light" ? (
+                  <>
+                    <Moon className="h-5 w-5" />
+                    <span>Dark Mode</span>
+                  </>
+                ) : (
+                  <>
+                    <Sun className="h-5 w-5" />
+                    <span>Light Mode</span>
+                  </>
+                )}
+              </motion.button>
+            </div>
           </motion.div>
         )}
         
+        {/* Scrollable main content area */}
         <motion.main
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ duration: 0.5 }}
-          className="flex-1 p-0 md:p-8 max-w-7xl mx-auto w-full"
+          className="flex-1 overflow-y-auto"
         >
           {/* Mobile Header */}
           {isMobile && (
             <motion.div
-              className="flex justify-between items-center px-3 py-4"
+              className="flex justify-between items-center px-3 py-4 sticky top-0 z-10 bg-background"
               initial={{ y: -20 }}
               animate={{ y: 0 }}
               transition={{ type: "spring", stiffness: 300, damping: 20 }}
@@ -213,11 +218,11 @@ export default function Home() {
             </motion.div>
           )}
 
-          {/* Mobile Tab Switcher */}
+          {/* Mobile Tab Switcher - Sticky at top */}
           {isMobile && (
             <Tabs 
               value={activeTab} 
-              className="w-full"
+              className="w-full sticky top-0 z-10 bg-background"
               onValueChange={handleTabChange}
             >
               <motion.div 
@@ -264,7 +269,7 @@ export default function Home() {
                     <StickyNote className="h-5 w-5" />
                   </TabsTrigger>
                   <TabsTrigger 
-                    value="calender" 
+                    value="calendar" 
                     className="flex-1 flex items-center justify-center py-3"
                   >
                     <CalendarCheck className="h-5 w-5" />
@@ -274,103 +279,106 @@ export default function Home() {
             </Tabs>
           )}
 
-          {/* Content Section with Loading States */}
-          {contentLoading ? (
-            <div className="flex justify-center items-center py-20">
-              {activeTab === "dashboard" && <ProductivityLoader type="neutral" size="large" showText text="Loading dashboard..." />}
-              {activeTab === "activity" && <ProductivityLoader type="activity" size="large" showText text="Loading activities..." />}
-              {activeTab === "habits" && <ProductivityLoader type="habit" habitType="build" size="large" showText text="Loading habits..." />}
-              {activeTab === "todos" && <ProductivityLoader type="todo" size="large" showText text="Loading todos..." />}
-              {activeTab === "reminders" && <ProductivityLoader type="reminder" size="large" showText text="Loading reminders..." />}
-              {activeTab === "notes" && <ProductivityLoader type="notes" size="large" showText text="Loading notes..." />}
-              {activeTab === "calendar" && <ProductivityLoader type="calender" size="large" showText text="Loading calender..."/>}
-            </div>
-          ) : (
-            <AnimatePresence mode="wait">
-              <div className="px-0">
-                {activeTab === "dashboard" && (
-                  <motion.div
-                    key="dashboard"
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -20 }}
-                    transition={{ duration: 0.2 }}
-                  >
-                    <Dashboard />
-                  </motion.div>
-                )}
-                {activeTab === "calendar" && (
-  <motion.div
-    key="calendar"
-    initial={{ opacity: 0, y: 20 }}
-    animate={{ opacity: 1, y: 0 }}
-    exit={{ opacity: 0, y: -20 }}
-    transition={{ duration: 0.2 }}
-  >
-    <Calendar />
-  </motion.div>
-)}
-                
-                {activeTab === "habits" && (
-                  <motion.div
-                    key="habits"
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -20 }}
-                    transition={{ duration: 0.2 }}
-                  >
-                    <HabitTracker />
-                  </motion.div>
-                )}
-                {activeTab === "activity" && (
-  <motion.div
-    key="activity"
-    initial={{ opacity: 0, y: 20 }}
-    animate={{ opacity: 1, y: 0 }}
-    exit={{ opacity: 0, y: -20 }}
-    transition={{ duration: 0.2 }}
-  >
-    <ActivityStream />
-  </motion.div>
-)}
-                {activeTab === "todos" && (
-                  <motion.div
-                    key="todos"
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -20 }}
-                    transition={{ duration: 0.2 }}
-                  >
-                    <TodoList />
-                  </motion.div>
-                )}
-
-                {activeTab === "reminders" && (
-                  <motion.div
-                    key="reminders"
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -20 }}
-                    transition={{ duration: 0.2 }}
-                  >
-                    <Reminders />
-                  </motion.div>
-                )}
-
-                {activeTab === "notes" && (
-                  <motion.div
-                    key="notes"
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -20 }}
-                    transition={{ duration: 0.2 }}
-                  >
-                    <Notes />
-                  </motion.div>
-                )}
+          {/* Content wrapper with padding */}
+          <div className="p-0 md:p-8 max-w-7xl mx-auto w-full">
+            {/* Content Section with Loading States */}
+            {contentLoading ? (
+              <div className="flex justify-center items-center py-20">
+                {activeTab === "dashboard" && <ProductivityLoader type="neutral" size="large" showText text="Loading dashboard..." />}
+                {activeTab === "activity" && <ProductivityLoader type="activity" size="large" showText text="Loading activities..." />}
+                {activeTab === "habits" && <ProductivityLoader type="habit" habitType="build" size="large" showText text="Loading habits..." />}
+                {activeTab === "todos" && <ProductivityLoader type="todo" size="large" showText text="Loading todos..." />}
+                {activeTab === "reminders" && <ProductivityLoader type="reminder" size="large" showText text="Loading reminders..." />}
+                {activeTab === "notes" && <ProductivityLoader type="notes" size="large" showText text="Loading notes..." />}
+                {activeTab === "calendar" && <ProductivityLoader type="calender" size="large" showText text="Loading calender..."/>}
               </div>
-            </AnimatePresence>
-          )}
+            ) : (
+              <AnimatePresence mode="wait">
+                <div className="px-0">
+                  {activeTab === "dashboard" && (
+                    <motion.div
+                      key="dashboard"
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -20 }}
+                      transition={{ duration: 0.2 }}
+                    >
+                      <Dashboard />
+                    </motion.div>
+                  )}
+                  {activeTab === "calendar" && (
+                    <motion.div
+                      key="calendar"
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -20 }}
+                      transition={{ duration: 0.2 }}
+                    >
+                      <Calendar />
+                    </motion.div>
+                  )}
+                  
+                  {activeTab === "habits" && (
+                    <motion.div
+                      key="habits"
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -20 }}
+                      transition={{ duration: 0.2 }}
+                    >
+                      <HabitTracker />
+                    </motion.div>
+                  )}
+                  {activeTab === "activity" && (
+                    <motion.div
+                      key="activity"
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -20 }}
+                      transition={{ duration: 0.2 }}
+                    >
+                      <ActivityStream />
+                    </motion.div>
+                  )}
+                  {activeTab === "todos" && (
+                    <motion.div
+                      key="todos"
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -20 }}
+                      transition={{ duration: 0.2 }}
+                    >
+                      <TodoList />
+                    </motion.div>
+                  )}
+
+                  {activeTab === "reminders" && (
+                    <motion.div
+                      key="reminders"
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -20 }}
+                      transition={{ duration: 0.2 }}
+                    >
+                      <Reminders />
+                    </motion.div>
+                  )}
+
+                  {activeTab === "notes" && (
+                    <motion.div
+                      key="notes"
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -20 }}
+                      transition={{ duration: 0.2 }}
+                    >
+                      <Notes />
+                    </motion.div>
+                  )}
+                </div>
+              </AnimatePresence>
+            )}
+          </div>
         </motion.main>
       </div>
     </div>
