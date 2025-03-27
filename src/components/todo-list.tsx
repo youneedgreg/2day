@@ -1,15 +1,16 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 "use client"
 
 import { useState, useEffect} from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { 
   Plus, Trash2, ListTodo, CheckCircle2, CircleSlash, Sparkles, 
-  Clock, BellRing,  X, ChevronRight, ChevronDown, 
+  Clock, BellRing, X, ChevronRight, ChevronDown, 
   Focus, Pencil, AlignLeft, Layers, Edit, Timer
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Card, CardContent} from "@/components/ui/card"
+import { Card, CardContent } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
@@ -65,7 +66,15 @@ const getTodosFromLocalStorage = (): Todo[] => {
   
   try {
     const parsedTodos = JSON.parse(storedTodos)
-    return Array.isArray(parsedTodos) ? parsedTodos : []
+    
+    // Ensure all todos have the required properties
+    const migratedTodos = parsedTodos.map((todo: any) => ({
+      ...todo,
+      notes: todo.notes || [],
+      isExpanded: todo.isExpanded ?? true
+    }))
+    
+    return Array.isArray(migratedTodos) ? migratedTodos : []
   } catch (error) {
     console.error('Error parsing todos from localStorage:', error)
     return []
@@ -112,7 +121,13 @@ export default function TodoList() {
       if (storedTodos) {
         try {
           const parsed = JSON.parse(storedTodos)
-          return Array.isArray(parsed) ? parsed : []
+          // Ensure all todos have required properties
+          const migratedTodos = Array.isArray(parsed) ? parsed.map((todo: any) => ({
+            ...todo,
+            notes: todo.notes || [],
+            isExpanded: todo.isExpanded ?? true
+          })) : []
+          return migratedTodos
         } catch (error) {
           console.error('Error parsing initial todos:', error)
         }
@@ -137,7 +152,7 @@ export default function TodoList() {
   const [newTodoHasTimer, setNewTodoHasTimer] = useState(false)
   const [activeTimerId, setActiveTimerId] = useState<string | null>(null)
   
-  // Load todos from localStorage on component mount
+  // Request notification permission on component mount
   useEffect(() => {
     const loadedTodos = getTodosFromLocalStorage()
     if (loadedTodos.length > 0) {
@@ -149,33 +164,37 @@ export default function TodoList() {
       setNotificationsEnabled(granted)
     })
   }, [])
+  useEffect(() => {
+    requestNotificationPermission().then(granted => {
+      setNotificationsEnabled(granted)
+    })
+  }, [])
 
   // Save todos to localStorage whenever they change
   useEffect(() => {
     saveTodosToLocalStorage(todos)
   }, [todos])
 
-  // Timer update effect - this handles all active timers
+  // Timer update effect with improved dependency management
   useEffect(() => {
     // Find all todos with active timers
     const todosWithRunningTimers = todos.filter(todo => 
       todo.timer?.isRunning && !todo.timer?.completed
     )
     
-    // No running timers? Clear activeTimers state
+    // No running timers? Exit early
     if (todosWithRunningTimers.length === 0) {
-      setActiveTimers({})
       return
     }
     
     // Set up interval to update timers every second
     const interval = setInterval(() => {
-      const newActiveTimers = { ...activeTimers }
-      let timersChanged = false
+      const updates: {[key: string]: number} = {}
+      let shouldUpdateTimers = false
       
       // Update each running timer
       todosWithRunningTimers.forEach(todo => {
-        if (!todo.timer) return
+        if (!todo.timer || !todo.timer.duration) return
         
         // Calculate remaining time
         const startTime = todo.timer.startTime ? new Date(todo.timer.startTime).getTime() : Date.now()
@@ -184,26 +203,30 @@ export default function TodoList() {
         const remainingMs = durationMs - elapsedMs
         const remainingSeconds = Math.max(0, Math.ceil(remainingMs / 1000))
         
-        // Update timer display
+        // Only update if the timer value changed
         if (activeTimers[todo.id] !== remainingSeconds) {
-          newActiveTimers[todo.id] = remainingSeconds
-          timersChanged = true
+          updates[todo.id] = remainingSeconds
+          shouldUpdateTimers = true
         }
         
         // Timer completed
         if (remainingSeconds === 0 && todo.timer.isRunning) {
           // Send notification if enabled
           if (notificationsEnabled && !timerNotifications[todo.id]) {
-            new Notification("Todo Timer Completed", { 
-              body: `Time's up for: ${todo.text}`,
-              icon: "/favicon.ico"
-            })
-            
-            // Mark this notification as sent
-            setTimerNotifications(prev => ({...prev, [todo.id]: true}))
+            try {
+              new Notification("Todo Timer Completed", { 
+                body: `Time's up for: ${todo.text}`,
+                icon: "/favicon.ico"
+              })
+              
+              // Mark this notification as sent
+              setTimerNotifications(prev => ({...prev, [todo.id]: true}))
+            } catch (error) {
+              console.error("Error sending notification:", error)
+            }
           }
           
-          // Update todo timer state
+          // Update todo timer state using functional update
           setTodos(currentTodos => currentTodos.map(t => {
             if (t.id === todo.id && t.timer) {
               return {
@@ -221,13 +244,13 @@ export default function TodoList() {
       })
       
       // Update active timers state if any changed
-      if (timersChanged) {
-        setActiveTimers(newActiveTimers)
+      if (shouldUpdateTimers) {
+        setActiveTimers(prev => ({...prev, ...updates}))
       }
     }, 1000)
     
     return () => clearInterval(interval)
-  }, [todos, activeTimers, notificationsEnabled, timerNotifications])
+  }, [todos, notificationsEnabled]) // Removed activeTimers from dependencies
 
   // Add new todo
   const addTodo = (parentId?: string) => {
@@ -250,16 +273,17 @@ export default function TodoList() {
       })
     }
 
-    setTodos([...todos, todo])
+    setTodos(prevTodos => [...prevTodos, todo])
     setNewTodo("")
     setNewTodoHasTimer(false)
     setNewTodoTimerDuration(25)
     setNewTodoDialogOpen(false)
+    setNewTodoParentId(undefined) // Clear parent ID after adding
   }
 
   // Toggle todo completion
   const toggleTodo = (id: string) => {
-    setTodos(todos.map((todo) => {
+    setTodos(prevTodos => prevTodos.map((todo) => {
       if (todo.id === id) {
         // Also stop timer if completing a todo
         const newTodo = { 
@@ -288,7 +312,19 @@ export default function TodoList() {
     const childIds = getAllChildIds(id, todos)
     const idsToDelete = [id, ...childIds]
     
-    setTodos(todos.filter((todo) => !idsToDelete.includes(todo.id)))
+    setTodos(prevTodos => prevTodos.filter((todo) => !idsToDelete.includes(todo.id)))
+    
+    // Clean up active timers if needed
+    const newActiveTimers = {...activeTimers}
+    idsToDelete.forEach(id => {
+      delete newActiveTimers[id]
+    })
+    setActiveTimers(newActiveTimers)
+    
+    // Update active timer if needed
+    if (activeTimerId && idsToDelete.includes(activeTimerId)) {
+      setActiveTimerId(null)
+    }
   }
 
   // Get all child IDs recursively
@@ -314,12 +350,24 @@ export default function TodoList() {
     const allChildIds = completedRootIds.flatMap(id => getAllChildIds(id, todos))
     const allIdsToRemove = [...completedRootIds, ...allChildIds]
     
-    setTodos(todos.filter(todo => !allIdsToRemove.includes(todo.id)))
+    setTodos(prevTodos => prevTodos.filter(todo => !allIdsToRemove.includes(todo.id)))
+    
+    // Clean up active timers for removed todos
+    const newActiveTimers = {...activeTimers}
+    allIdsToRemove.forEach(id => {
+      delete newActiveTimers[id]
+    })
+    setActiveTimers(newActiveTimers)
+    
+    // Update active timer if needed
+    if (activeTimerId && allIdsToRemove.includes(activeTimerId)) {
+      setActiveTimerId(null)
+    }
   }
 
   // Toggle todo expansion (for nested todos)
   const toggleExpand = (id: string) => {
-    setTodos(todos.map(todo => 
+    setTodos(prevTodos => prevTodos.map(todo => 
       todo.id === id ? { ...todo, isExpanded: !todo.isExpanded } : todo
     ))
   }
@@ -333,7 +381,7 @@ export default function TodoList() {
   const saveEditTodo = () => {
     if (!editingTodoId || !editText.trim()) return
     
-    setTodos(todos.map(todo => 
+    setTodos(prevTodos => prevTodos.map(todo => 
       todo.id === editingTodoId ? { ...todo, text: editText } : todo
     ))
     
@@ -343,11 +391,8 @@ export default function TodoList() {
 
   // Timer controls
   const startTimer = (id: string) => {
-    setTodos(todos.map(todo => {
+    setTodos(prevTodos => prevTodos.map(todo => {
       if (todo.id === id && todo.timer) {
-        // Reset any notification for this timer
-        setTimerNotifications(prev => ({...prev, [id]: false}))
-        
         return {
           ...todo,
           timer: {
@@ -364,12 +409,15 @@ export default function TodoList() {
       return todo
     }))
     
+    // Reset notification state
+    setTimerNotifications(prev => ({...prev, [id]: false}))
+    
     // Set this as the active timer
     setActiveTimerId(id)
   }
 
   const pauseTimer = (id: string) => {
-    setTodos(todos.map(todo => {
+    setTodos(prevTodos => prevTodos.map(todo => {
       if (todo.id === id && todo.timer) {
         // Calculate remaining time
         const remainingSeconds = activeTimers[id] || 0
@@ -393,7 +441,7 @@ export default function TodoList() {
   }
 
   const resetTimer = (id: string) => {
-    setTodos(todos.map(todo => {
+    setTodos(prevTodos => prevTodos.map(todo => {
       if (todo.id === id && todo.timer) {
         return {
           ...todo,
@@ -410,9 +458,11 @@ export default function TodoList() {
     }))
     
     // Clear this timer from active timers
-    const newActiveTimers = {...activeTimers}
-    delete newActiveTimers[id]
-    setActiveTimers(newActiveTimers)
+    setActiveTimers(prev => {
+      const newTimers = {...prev}
+      delete newTimers[id]
+      return newTimers
+    })
     
     // Reset notification state
     setTimerNotifications(prev => ({...prev, [id]: false}))
@@ -433,11 +483,11 @@ export default function TodoList() {
       createdAt: new Date().toISOString()
     }
     
-    setTodos(todos.map(todo => {
+    setTodos(prevTodos => prevTodos.map(todo => {
       if (todo.id === todoId) {
         return {
           ...todo,
-          notes: [...todo.notes, newNote]
+          notes: [...(todo.notes || []), newNote]
         }
       }
       return todo
@@ -448,14 +498,39 @@ export default function TodoList() {
   }
   
   const deleteNote = (todoId: string, noteId: string) => {
-    setTodos(todos.map(todo => {
-      if (todo.id === todoId) {
+    setTodos(prevTodos => prevTodos.map(todo => {
+      if (todo.id === todoId && todo.notes) {
         return {
           ...todo,
           notes: todo.notes.filter(note => note.id !== noteId)
         }
       }
       return todo
+    }))
+  }
+
+  // Handle opening the timer dialog
+  const handleOpenTimerDialog = () => {
+    if (newTodo.trim()) {
+      setNewTodoHasTimer(true)
+      setNewTodoDialogOpen(true)
+    }
+  }
+
+  // Add timer to existing todo
+  const addTimerToTodo = (todoId: string) => {
+    setTodos(prevTodos => prevTodos.map(t => {
+      if (t.id === todoId) {
+        return {
+          ...t, 
+          timer: { 
+            duration: 25, 
+            isRunning: false, 
+            completed: false 
+          }
+        }
+      }
+      return t
     }))
   }
 
@@ -474,14 +549,19 @@ export default function TodoList() {
     const hasChildren = todos.some(t => t.parentId === todo.id)
     const childTodos = filteredTodos.filter(t => t.parentId === todo.id)
     const hasTimer = !!todo.timer
-const timerRemaining = activeTimers[todo.id] || (todo.timer?.pausedTimeRemaining || (todo.timer?.duration || 0) * 60 || 0)
-const timerProgress = hasTimer && todo.timer && todo.timer.duration
-  ? 100 - (timerRemaining / (todo.timer.duration * 60) * 100)
-  : 0
+    const timerRemaining = activeTimers[todo.id] || (todo.timer?.pausedTimeRemaining || (todo.timer?.duration || 0) * 60 || 0)
+    const timerProgress = hasTimer && todo.timer && todo.timer.duration
+      ? 100 - (timerRemaining / (todo.timer.duration * 60) * 100)
+      : 0
       
-
     // Count all notes
-const notesCount = todo.notes?.length || 0
+    const notesCount = todo.notes?.length || 0
+    
+    // Determine margin for nested level
+    const marginClass = level === 0 ? "" : 
+                        level === 1 ? "ml-6" : 
+                        level === 2 ? "ml-12" : 
+                        level === 3 ? "ml-18" : "ml-24"
     
     return (
       <motion.div 
@@ -497,7 +577,7 @@ const notesCount = todo.notes?.length || 0
             "overflow-hidden transition-all duration-200 hover:shadow-md",
             todo.completed ? "bg-muted/30" : "",
             isFocusMode && todo.id !== activeTimerId ? "opacity-40" : "",
-            level > 0 ? `ml-${level * 6}` : ""
+            marginClass
           )}
         >
           <CardContent className={cn(
@@ -533,7 +613,12 @@ const notesCount = todo.notes?.length || 0
                       <Input 
                         value={editText} 
                         onChange={(e) => setEditText(e.target.value)} 
-                        onKeyDown={(e) => e.key === "Enter" && saveEditTodo()}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault()
+                            saveEditTodo()
+                          }
+                        }}
                         className="h-8 text-sm"
                         autoFocus
                       />
@@ -608,17 +693,7 @@ const notesCount = todo.notes?.length || 0
                     </DropdownMenuItem>
                     
                     {!todo.timer && (
-                      <DropdownMenuItem onClick={() => {
-                        setTodos(todos.map(t => {
-                          if (t.id === todo.id) {
-                            return {
-                              ...t, 
-                              timer: { duration: 25, isRunning: false, completed: false }
-                            }
-                          }
-                          return t
-                        }))
-                      }}>
+                      <DropdownMenuItem onClick={() => addTimerToTodo(todo.id)}>
                         <Timer className="h-4 w-4 mr-2" />
                         Add Timer
                       </DropdownMenuItem>
@@ -687,7 +762,7 @@ const notesCount = todo.notes?.length || 0
         
         {/* Render children if expanded */}
         {todo.isExpanded && hasChildren && (
-          <div className="pl-6 space-y-2">
+          <div className="space-y-2">
             {childTodos.map(childTodo => renderTodoItem(childTodo, level + 1))}
           </div>
         )}
@@ -770,11 +845,7 @@ const notesCount = todo.notes?.length || 0
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault()
                 if (newTodo.trim()) {
-                  if (newTodoHasTimer) {
-                    setNewTodoDialogOpen(true)
-                  } else {
-                    addTodo()
-                  }
+                  addTodo()
                 }
               }
             }}
@@ -783,7 +854,12 @@ const notesCount = todo.notes?.length || 0
           
           <div className="flex space-x-2">
             <DialogTrigger asChild>
-              <Button variant="outline" size="icon" className="shadow-sm">
+              <Button 
+                variant="outline" 
+                size="icon" 
+                className="shadow-sm"
+                onClick={handleOpenTimerDialog}
+              >
                 <Clock className="h-4 w-4" />
               </Button>
             </DialogTrigger>
@@ -886,7 +962,7 @@ const notesCount = todo.notes?.length || 0
                 </div>
                 
                 <div className="space-y-2 max-h-[40vh] overflow-y-auto">
-                  {todos.find(t => t.id === selectedTodoForNote)?.notes.map(note => (
+                  {todos.find(t => t.id === selectedTodoForNote)?.notes?.map(note => (
                     <Card key={note.id} className="p-2">
                       <div className="flex justify-between">
                         <p className="text-sm whitespace-pre-wrap">{note.content}</p>
@@ -905,7 +981,7 @@ const notesCount = todo.notes?.length || 0
                     </Card>
                   ))}
                   
-                  {todos.find(t => t.id === selectedTodoForNote)?.notes.length === 0 && (
+                  {(todos.find(t => t.id === selectedTodoForNote)?.notes?.length || 0) === 0 && (
                     <div className="text-center py-8 text-muted-foreground">
                       <AlignLeft className="h-8 w-8 mx-auto mb-2 opacity-50" />
                       <p>No notes yet. Add your first note!</p>
@@ -929,7 +1005,7 @@ const notesCount = todo.notes?.length || 0
 
       {/* Tabs & Todo List */}
       <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
-        <Tabs defaultValue="all" value={activeTab} onValueChange={(value) => setActiveTab(value as never)}>
+        <Tabs defaultValue="all" value={activeTab} onValueChange={(value) => setActiveTab(value as any)}>
           <TabsList className="mb-4 bg-muted/50 p-1 rounded-xl">
             <TabsTrigger value="all" className="rounded-lg data-[state=active]:shadow-md">
               All
@@ -957,7 +1033,7 @@ const notesCount = todo.notes?.length || 0
           </TabsContent>
           
           <TabsContent value="active">
-            {rootTodos.length === 0 ? (
+            {rootTodos.filter(todo => !todo.completed).length === 0 ? (
               <EmptyState tab="active" onAddClick={() => document.querySelector("input")?.focus()} />
             ) : (
               <div className="space-y-2">
@@ -969,7 +1045,7 @@ const notesCount = todo.notes?.length || 0
           </TabsContent>
           
           <TabsContent value="completed">
-            {rootTodos.length === 0 ? (
+            {rootTodos.filter(todo => todo.completed).length === 0 ? (
               <EmptyState tab="completed" />
             ) : (
               <div className="space-y-2">
