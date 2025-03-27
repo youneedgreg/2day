@@ -619,6 +619,7 @@ export default function Notes() {
     setDialogOpen(false)
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const updateNote = (id: string, content: string, contentType?: "richtext" | "drawing" | "plain", newStyleConfig?: any) => {
     setNotes(
       notes.map((note) =>
@@ -665,80 +666,6 @@ export default function Notes() {
   // Call debug function
   debugNotes()
 
-  // Debug component for development
-  const DebugPanel = () => {
-    const [localStorageContent, setLocalStorageContent] = useState<string>('Loading...')
-    
-    useEffect(() => {
-      if (typeof window !== 'undefined') {
-        const content = localStorage.getItem('notes') || 'No notes found'
-        setLocalStorageContent(content)
-      }
-    }, [notes]) // Update when notes change
-    
-    if (process.env.NODE_ENV !== 'development') {
-      return null // Only show in development
-    }
-    
-    return (
-      <div className="mt-6 p-4 border border-red-300 rounded bg-red-50 text-sm">
-        <h3 className="font-bold text-red-800 mb-2">Debug Information</h3>
-        <div className="mb-2">
-          <strong>Notes in state:</strong> {notes.length}
-        </div>
-        <div className="mb-2">
-          <strong>Sorted notes:</strong> {sortedNotes.length}
-        </div>
-        <div className="mb-2">
-          <strong>Editing note ID:</strong> {editingNote || 'None'}
-        </div>
-        <div>
-          <strong>LocalStorage content:</strong>
-          <pre className="mt-1 p-2 bg-white border rounded overflow-auto max-h-40 text-xs">
-            {localStorageContent}
-          </pre>
-        </div>
-        <div className="mt-4 flex gap-2">
-          <Button 
-            size="sm" 
-            variant="outline" 
-            onClick={() => console.log('Current notes state:', notes)}
-          >
-            Log State
-          </Button>
-          <Button 
-            size="sm" 
-            variant="outline" 
-            onClick={() => {
-              const testNote = {
-                id: generateId(),
-                title: "Debug Test Note",
-                content: "This is a test note created for debugging purposes.",
-                contentType: "plain" as const,
-                createdAt: new Date().toISOString(),
-                updatedAt: new Date().toISOString(),
-              };
-              setNotes(prev => [...prev, testNote]);
-            }}
-          >
-            Add Test Note
-          </Button>
-          <Button 
-            size="sm" 
-            variant="destructive" 
-            onClick={() => {
-              localStorage.removeItem('notes');
-              setNotes([]);
-              window.location.reload();
-            }}
-          >
-            Clear & Reload
-          </Button>
-        </div>
-      </div>
-    )
-  }
-
   return (
     <div className="space-y-6">
       <motion.div
@@ -758,7 +685,81 @@ export default function Notes() {
           </motion.div>
         </div>
         
-        {/* Dialog component would go here */}
+        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+  <DialogTrigger asChild>
+    <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+      <Button className="flex items-center gap-2 rounded-full shadow-md">
+        <Plus className="h-4 w-4" />
+        <span>New Note</span>
+      </Button>
+    </motion.div>
+  </DialogTrigger>
+  <DialogContent className="sm:max-w-lg">
+    <DialogHeader>
+      <DialogTitle className="flex items-center gap-2">
+        <FileText className="h-5 w-5 text-primary" />
+        Create a New Note
+      </DialogTitle>
+    </DialogHeader>
+    <div className="space-y-4 py-4">
+      <div className="space-y-2">
+        <Label htmlFor="note-title">Title</Label>
+        <Input
+          id="note-title"
+          placeholder="Give your note a title..."
+          value={newNoteTitle}
+          onChange={(e) => setNewNoteTitle(e.target.value)}
+          className="focus-visible:ring-primary"
+        />
+      </div>
+
+      <Tabs 
+        defaultValue="richtext" 
+        onValueChange={(value) => setNewNoteType(value as never)}
+        className="space-y-4"
+      >
+        <TabsList className="grid grid-cols-3">
+          <TabsTrigger value="richtext">Rich Text</TabsTrigger>
+          <TabsTrigger value="drawing">Drawing</TabsTrigger>
+          <TabsTrigger value="plain">Plain Text</TabsTrigger>
+        </TabsList>
+        
+        <TabsContent value="richtext" className="space-y-4">
+          <RichTextEditor 
+            initialValue={newNoteContent} 
+            onChange={setNewNoteContent}
+            styleConfig={styleConfig}
+          />
+        </TabsContent>
+        
+        <TabsContent value="drawing" className="space-y-4">
+          <DrawingCanvas
+            initialValue={newNoteContent}
+            onChange={setNewNoteContent}
+          />
+        </TabsContent>
+        
+        <TabsContent value="plain" className="space-y-4">
+          <Textarea
+            placeholder="What's on your mind?"
+            rows={6}
+            value={newNoteContent}
+            onChange={(e) => setNewNoteContent(e.target.value)}
+            className="focus-visible:ring-primary resize-none"
+          />
+        </TabsContent>
+      </Tabs>
+    </div>
+    <DialogFooter>
+      <Button variant="outline" onClick={() => setDialogOpen(false)}>
+        Cancel
+      </Button>
+      <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+        <Button onClick={addNote}>Save Note</Button>
+      </motion.div>
+    </DialogFooter>
+  </DialogContent>
+</Dialog>
         
       </motion.div>
   
@@ -915,3 +916,4 @@ export default function Notes() {
       )}
     </div>
   );
+}
