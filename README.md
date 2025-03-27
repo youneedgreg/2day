@@ -135,12 +135,9 @@ Made with ❤️ for productivity enthusiastss
 ## implement
 dashboard cards
 reminder cards
-to-do ident
-to do timer
 note formatting
-to do notes
-to -do view...inspo from today
-to do spaces
+reminders spaces
+bugs
 
 
 
@@ -150,6 +147,7 @@ storage
 chat
 emails and text notifications.
 floating ai
+to -do view...inspo from today
 auth
 vision board
 goals
@@ -160,3 +158,4 @@ voice memos
 attachment on notes
 ai intergration
 ai reminder
+react native
