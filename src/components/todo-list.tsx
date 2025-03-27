@@ -479,8 +479,9 @@ const timerProgress = hasTimer && todo.timer && todo.timer.duration
   ? 100 - (timerRemaining / (todo.timer.duration * 60) * 100)
   : 0
       
+
     // Count all notes
-    const notesCount = todo.notes.length
+const notesCount = todo.notes?.length || 0
     
     return (
       <motion.div 
@@ -928,7 +929,7 @@ const timerProgress = hasTimer && todo.timer && todo.timer.duration
 
       {/* Tabs & Todo List */}
       <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
-        <Tabs defaultValue="all" value={activeTab} onValueChange={(value) => setActiveTab(value as any)}>
+        <Tabs defaultValue="all" value={activeTab} onValueChange={(value) => setActiveTab(value as never)}>
           <TabsList className="mb-4 bg-muted/50 p-1 rounded-xl">
             <TabsTrigger value="all" className="rounded-lg data-[state=active]:shadow-md">
               All
