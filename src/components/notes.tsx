@@ -365,7 +365,7 @@ const DrawingCanvas = ({
     
     // Load existing drawing if available
     if (initialValue) {
-      const img = new Image()
+      const img = new window.Image()
       img.onload = () => {
         ctx.drawImage(img, 0, 0)
       }
