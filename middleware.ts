@@ -14,7 +14,7 @@ export async function middleware(req: NextRequest) {
 
   // Protected routes
   const protectedPaths = [
-    '/dashboard',
+    '/',
     '/habits',
     '/todos',
     '/reminders',
