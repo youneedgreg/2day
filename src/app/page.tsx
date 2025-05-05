@@ -26,8 +26,6 @@ import {
   ActivityIcon,
   CalendarCheck
 } from "lucide-react"
-import { cookies } from 'next/headers'
-import { createClient }from '@/lib/utils/supabase/client'
 
 export default function Home() {
   const [mounted, setMounted] = useState(false)
