@@ -17,11 +17,13 @@ export default function AccountForm({ user }: { user: User | null }) {
   const supabase = createClient()
   const { success, error } = useToast()
   const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
   const [fullname, setFullname] = useState<string | null>(null)
   const [username, setUsername] = useState<string | null>(null)
   const [website, setWebsite] = useState<string | null>(null)
   const [avatar_url, setAvatarUrl] = useState<string | null>(null)
   const [uploading, setUploading] = useState(false)
+  const [initialDataLoaded, setInitialDataLoaded] = useState(false)
 
   const getProfile = useCallback(async () => {
     try {
@@ -44,6 +46,9 @@ export default function AccountForm({ user }: { user: User | null }) {
         setWebsite(data.website)
         setAvatarUrl(data.avatar_url)
       }
+      
+      // Mark that we've loaded initial data
+      setInitialDataLoaded(true)
     } catch (err) {
       error({
         title: "Failed to load profile",
@@ -55,8 +60,10 @@ export default function AccountForm({ user }: { user: User | null }) {
   }, [user, supabase, error])
 
   useEffect(() => {
-    getProfile()
-  }, [user, getProfile])
+    if (user && !initialDataLoaded) {
+      getProfile()
+    }
+  }, [user, getProfile, initialDataLoaded])
 
   async function updateProfile({
     username,
@@ -69,7 +76,7 @@ export default function AccountForm({ user }: { user: User | null }) {
     avatar_url: string | null
   }) {
     try {
-      setLoading(true)
+      setSaving(true)
 
       const { error: updateError } = await supabase.from('profiles').upsert({
         id: user?.id as string,
@@ -93,7 +100,7 @@ export default function AccountForm({ user }: { user: User | null }) {
         description: "We couldn't update your profile. Please try again."
       })
     } finally {
-      setLoading(false)
+      setSaving(false)
     }
   }
 
@@ -121,12 +128,10 @@ export default function AccountForm({ user }: { user: User | null }) {
       
       setAvatarUrl(data.publicUrl)
       
-      // Update the profile with the new avatar URL
-      await updateProfile({ username, fullname, website, avatar_url: data.publicUrl })
-      
+      // Just update the avatar URL in state, don't call updateProfile
       success({
-        title: "Avatar updated",
-        description: "Your profile picture has been updated successfully."
+        title: "Avatar uploaded",
+        description: "Your profile picture has been uploaded. Click Save Changes to update your profile."
       })
     } catch (err) {
       error({
@@ -245,9 +250,9 @@ export default function AccountForm({ user }: { user: User | null }) {
         <Button
           className="w-full bg-violet-600 hover:bg-violet-700 text-white"
           onClick={() => updateProfile({ fullname, username, website, avatar_url })}
-          disabled={loading}
+          disabled={saving || loading}
         >
-          {loading ? (
+          {saving ? (
             <>
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               Saving...
