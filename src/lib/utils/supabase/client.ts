@@ -1,36 +1,10 @@
-// utils/supabase/client.ts
-import { createClient } from '@supabase/supabase-js';
+import { createBrowserClient } from '@supabase/ssr'
+import type { SupabaseClient } from '@supabase/supabase-js'
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL as string;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY as string;
-
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
-
-// Define your database types
-export type Database = {
-  public: {
-    tables: {
-      todos: {
-        Row: {
-          id: string;
-          title: string;
-          completed: boolean;
-          user_id: string;
-        };
-        Insert: {
-          id?: string;
-          title: string;
-          completed?: boolean;
-          user_id: string;
-        };
-        Update: {
-          id?: string;
-          title?: string;
-          completed?: boolean;
-          user_id?: string;
-        };
-      };
-      // Define other tables here
-    };
-  };
-};
+export function createClient(): SupabaseClient {
+  // Create a supabase client on the browser with project's credentials
+  return createBrowserClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL as string,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY as string
+  )
+}
