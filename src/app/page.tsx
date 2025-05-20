@@ -28,6 +28,7 @@ import {
 } from "lucide-react"
 import { createClient } from '@/lib/utils/supabase/client'
 import { useRouter } from 'next/navigation'
+import type { Session, User } from '@supabase/supabase-js'
 
 export default function Home() {
   const [mounted, setMounted] = useState(false)
@@ -36,10 +37,14 @@ export default function Home() {
   const [isMobile, setIsMobile] = useState(true)
   const [isLoading, setIsLoading] = useState(true)
   const [contentLoading, setContentLoading] = useState(false)
+  const [session, setSession] = useState<Session | null>(null)
+  const [user, setUser] = useState<User | null>(null)
+  const [authError, setAuthError] = useState<string | null>(null)
+  
   const router = useRouter()
   const supabase = createClient()
 
-  // Prevent hydration errors with localStorage and handle responsive layout
+  // Enhanced authentication check
   useEffect(() => {
     setMounted(true)
     
@@ -60,48 +65,153 @@ export default function Home() {
     // Add listener for window resize
     window.addEventListener('resize', checkIfMobile)
     
-    // Check authentication state and set up session listener
-    const checkAuth = async () => {
+    // Enhanced authentication state management
+    const initializeAuth = async () => {
       try {
-        const { data: { session }, error } = await supabase.auth.getSession()
+        setIsLoading(true)
+        setAuthError(null)
         
-        if (error) {
-          console.error('Auth error:', error.message)
-          router.push('/login')
+        // Get current session
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+        
+        if (sessionError) {
+          console.error('Session error:', sessionError.message)
+          setAuthError(sessionError.message)
+          router.replace('/login')
           return
         }
 
         if (!session) {
-          router.push('/login')
+          console.log('No active session found')
+          router.replace('/login')
           return
         }
 
-        // Set up auth state change listener
-        const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-          if (event === 'SIGNED_OUT' || !session) {
-            router.push('/login')
-          }
-        })
+        // Check if session is still valid (not expired)
+        const now = Math.floor(Date.now() / 1000)
+        if (session.expires_at && session.expires_at < now) {
+          console.log('Session expired')
+          await supabase.auth.signOut()
+          router.replace('/login')
+          return
+        }
 
+        // Verify user data
+        const { data: { user }, error: userError } = await supabase.auth.getUser()
+        
+        if (userError || !user) {
+          console.error('User verification failed:', userError?.message)
+          await supabase.auth.signOut()
+          router.replace('/login')
+          return
+        }
+
+        // Set authenticated state
+        setSession(session)
+        setUser(user)
         setIsLoading(false)
 
-        // Cleanup subscription
-        return () => {
-          subscription.unsubscribe()
-        }
+        console.log('Authentication successful:', {
+          userId: user.id,
+          email: user.email,
+          expiresAt: new Date(session.expires_at! * 1000).toISOString()
+        })
+
       } catch (error) {
-        console.error('Auth check error:', error)
-        router.push('/login')
+        console.error('Auth initialization error:', error)
+        setAuthError('Authentication failed')
+        router.replace('/login')
       }
     }
+
+    // Set up auth state change listener
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log('Auth state changed:', event, session?.user?.email)
+      
+      switch (event) {
+        case 'SIGNED_IN':
+          if (session?.user) {
+            setSession(session)
+            setUser(session.user)
+            setIsLoading(false)
+            setAuthError(null)
+          }
+          break
+          
+        case 'SIGNED_OUT':
+          setSession(null)
+          setUser(null)
+          setIsLoading(false)
+          router.replace('/login')
+          break
+          
+        case 'TOKEN_REFRESHED':
+          if (session?.user) {
+            setSession(session)
+            setUser(session.user)
+            console.log('Token refreshed successfully')
+          }
+          break
+          
+        case 'USER_UPDATED':
+          if (session?.user) {
+            setUser(session.user)
+          }
+          break
+          
+        default:
+          // For any other event, verify auth state
+          if (!session || !session.user) {
+            setSession(null)
+            setUser(null)
+            router.replace('/login')
+          }
+      }
+    })
+
+    // Initialize authentication
+    initializeAuth()
     
-    checkAuth()
-    
-    // Cleanup
+    // Cleanup function
     return () => {
       window.removeEventListener('resize', checkIfMobile)
+      subscription.unsubscribe()
     }
   }, [router, supabase])
+
+  // Session refresh interval (refresh 5 minutes before expiry)
+  useEffect(() => {
+    if (!session) return
+
+    const refreshToken = async () => {
+      try {
+        const { data, error } = await supabase.auth.refreshSession()
+        if (error) {
+          console.error('Token refresh failed:', error.message)
+          router.replace('/login')
+        } else if (data.session) {
+          setSession(data.session)
+          console.log('Session refreshed successfully')
+        }
+      } catch (error) {
+        console.error('Token refresh error:', error)
+        router.replace('/login')
+      }
+    }
+
+    // Calculate time until token expiry (refresh 5 minutes before)
+    const expiresAt = session.expires_at!
+    const now = Math.floor(Date.now() / 1000)
+    const timeUntilRefresh = (expiresAt - now - 300) * 1000 // 5 minutes before expiry
+
+    if (timeUntilRefresh > 0) {
+      const refreshTimer = setTimeout(refreshToken, timeUntilRefresh)
+      return () => clearTimeout(refreshTimer)
+    } else {
+      // Token is already expired or about to expire, refresh immediately
+      refreshToken()
+    }
+  }, [session, supabase, router])
 
   const toggleTheme = () => {
     setTheme(theme === "light" ? "dark" : "light")
@@ -119,11 +229,35 @@ export default function Home() {
     }, 800)
   }
 
-  if (!mounted) return null
+  // Don't render anything until mounted
+  if (!mounted) {
+    return null
+  }
   
-  // Display initial page loader
+  // Show loading state while checking authentication
   if (isLoading) {
-    return <PageLoader type="neutral" text="Welcome to 2day!" showText={true} />
+    return (
+      <div className="h-screen flex items-center justify-center">
+        <PageLoader 
+          type="neutral" 
+          text={authError ? "Authentication failed..." : "Verifying authentication..."} 
+          showText={true} 
+        />
+      </div>
+    )
+  }
+
+  // If no session after loading, don't render the page (user will be redirected)
+  if (!session || !user) {
+    return (
+      <div className="h-screen flex items-center justify-center">
+        <PageLoader 
+          type="neutral" 
+          text="Redirecting to login..." 
+          showText={true} 
+        />
+      </div>
+    )
   }
 
   // Navigation items shared between mobile and desktop
