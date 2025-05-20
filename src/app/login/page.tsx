@@ -38,48 +38,50 @@ export default function LoginPage() {
   
 
   return (
-    <div className="flex justify-center items-center min-h-screen bg-slate-50">
+    <div className="flex justify-center items-center min-h-screen bg-background">
       <Tabs defaultValue="login" className="w-full max-w-md">
-        <TabsList className="grid w-full grid-cols-2">
-          <TabsTrigger value="login">Login</TabsTrigger>
-          <TabsTrigger value="signup">Sign Up</TabsTrigger>
+        <TabsList className="grid w-full grid-cols-2 bg-secondary">
+          <TabsTrigger value="login" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">Login</TabsTrigger>
+          <TabsTrigger value="signup" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">Sign Up</TabsTrigger>
         </TabsList>
         
         {/* Login Form */}
         <TabsContent value="login">
-          <Card>
+          <Card className="border-border bg-card">
             <CardHeader>
-              <CardTitle>Login</CardTitle>
-              <CardDescription>
+              <CardTitle className="text-card-foreground">Welcome Back</CardTitle>
+              <CardDescription className="text-muted-foreground">
                 Enter your credentials to access your account
               </CardDescription>
             </CardHeader>
             <form onSubmit={handleLogin}>
               <CardContent className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="login-email">Email</Label>
+                  <Label htmlFor="login-email" className="text-card-foreground">Email</Label>
                   <Input 
                     id="login-email" 
                     type="email" 
                     placeholder="your@email.com" 
                     value={email}
                     onChange={handleEmailChange}
+                    className="bg-background border-input text-foreground"
                     required 
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="login-password">Password</Label>
+                  <Label htmlFor="login-password" className="text-card-foreground">Password</Label>
                   <Input 
                     id="login-password" 
                     type="password" 
                     value={password}
                     onChange={handlePasswordChange}
+                    className="bg-background border-input text-foreground"
                     required 
                   />
                 </div>
               </CardContent>
               <CardFooter>
-                <Button type="submit" className="w-full">Log in</Button>
+                <Button type="submit" className="w-full bg-primary text-primary-foreground hover:bg-primary/90">Log in</Button>
               </CardFooter>
             </form>
           </Card>
@@ -87,39 +89,41 @@ export default function LoginPage() {
         
         {/* Signup Form */}
         <TabsContent value="signup">
-          <Card>
+          <Card className="border-border bg-card">
             <CardHeader>
-              <CardTitle>Create an account</CardTitle>
-              <CardDescription>
+              <CardTitle className="text-card-foreground">Create an Account</CardTitle>
+              <CardDescription className="text-muted-foreground">
                 Enter your details to create a new account
               </CardDescription>
             </CardHeader>
             <form onSubmit={handleSignup}>
               <CardContent className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="signup-email">Email</Label>
+                  <Label htmlFor="signup-email" className="text-card-foreground">Email</Label>
                   <Input 
                     id="signup-email" 
                     type="email" 
                     placeholder="your@email.com" 
                     value={email}
                     onChange={handleEmailChange}
+                    className="bg-background border-input text-foreground"
                     required 
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="signup-password">Password</Label>
+                  <Label htmlFor="signup-password" className="text-card-foreground">Password</Label>
                   <Input 
                     id="signup-password" 
                     type="password"
                     value={password}
                     onChange={handlePasswordChange}
+                    className="bg-background border-input text-foreground"
                     required 
                   />
                 </div>
               </CardContent>
               <CardFooter>
-                <Button type="submit" className="w-full">Sign up</Button>
+                <Button type="submit" className="w-full bg-primary text-primary-foreground hover:bg-primary/90">Sign up</Button>
               </CardFooter>
             </form>
           </Card>
