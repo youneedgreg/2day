@@ -12,80 +12,44 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogT
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useAuth } from '@/hooks/useAuth'
-import { getHabits, createHabit, completeHabit, subscribeToChanges } from '@/lib/utils/database'
-import { Database } from '@/lib/types/database'
+import { 
+  getHabits, 
+  createHabit, 
+  completeHabit, 
+  uncompleteHabit, 
+  deleteHabit, 
+  subscribeToHabitChanges,
+  type HabitWithCompletions 
+} from '@/lib/utils/database/habits'
+import { toast } from 'sonner'
 
-// Define types directly in this file
+// Define types
 type HabitType = "builder" | "quitter"
 
-type HistoryEntry = {
-  date: string
-  completed: boolean
-}
-
-type Habit = Database['public']['Tables']['habits']['Row'] & {
-  habit_completions: Database['public']['Tables']['habit_completions']['Row'][]
-}
+const DAYS_OF_WEEK = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 
 // Helper functions
-const generateId = (): string => {
-  return Math.random().toString(36).substring(2, 9)
-}
-
 const getTodayFormatted = (): string => {
   return new Date().toISOString().split('T')[0]
 }
 
-// Debugging function for localStorage
-const debugLocalStorage = () => {
-  if (typeof window !== 'undefined') {
-    const storedHabits = localStorage.getItem('habits')
-    console.log('Raw habits from localStorage:', storedHabits)
-    if (storedHabits) {
-      try {
-        const parsed = JSON.parse(storedHabits)
-        console.log('Parsed habits:', parsed)
-        return parsed
-      } catch (error) {
-        console.error('Error parsing habits from localStorage:', error)
-      }
-    } else {
-      console.log('No habits found in localStorage')
-    }
-  }
-  return []
-}
-
-// Improved localStorage functions
-const getHabitsFromLocalStorage = (): Habit[] => {
-  if (typeof window === 'undefined') return []
-  
-  const storedHabits = localStorage.getItem('habits')
-  console.log('Getting habits from localStorage:', storedHabits)
-  
-  if (!storedHabits) return []
+const parseHabitMetadata = (description: string | null) => {
+  if (!description) return { type: 'builder', frequency_days: [] }
   
   try {
-    const parsedHabits = JSON.parse(storedHabits)
-    console.log('Successfully parsed habits:', parsedHabits)
-    return Array.isArray(parsedHabits) ? parsedHabits : []
-  } catch (error) {
-    console.error('Error parsing habits from localStorage:', error)
-    return []
+    const parsed = JSON.parse(description)
+    return {
+      type: parsed.type || 'builder',
+      frequency_days: parsed.frequency_days || []
+    }
+  } catch {
+    return { type: 'builder', frequency_days: [] }
   }
 }
-
-const saveHabitsToLocalStorage = (habits: Habit[]): void => {
-  if (typeof window === 'undefined') return
-  console.log('Saving habits to localStorage:', habits)
-  localStorage.setItem('habits', JSON.stringify(habits))
-}
-
-const DAYS_OF_WEEK = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 
 export default function HabitTracker() {
   const { user } = useAuth()
-  const [habits, setHabits] = useState<Habit[]>([])
+  const [habits, setHabits] = useState<HabitWithCompletions[]>([])
   const [newHabit, setNewHabit] = useState("")
   const [habitType, setHabitType] = useState<HabitType>("builder")
   const [frequency, setFrequency] = useState<string[]>(["Mon", "Tue", "Wed", "Thu", "Fri"])
@@ -96,20 +60,12 @@ export default function HabitTracker() {
   useEffect(() => {
     if (!user) return
 
-    // Fetch initial habits
     fetchHabits()
 
     // Subscribe to real-time updates
-    const subscription = subscribeToChanges('habits', (payload) => {
-      if (payload.event === 'INSERT') {
-        setHabits((prev) => [payload.new as Habit, ...prev])
-      } else if (payload.event === 'UPDATE') {
-        setHabits((prev) =>
-          prev.map((habit) => (habit.id === payload.new?.id ? (payload.new as Habit) : habit))
-        )
-      } else if (payload.event === 'DELETE') {
-        setHabits((prev) => prev.filter((habit) => habit.id !== payload.old?.id))
-      }
+    const subscription = subscribeToHabitChanges(user.id, (payload) => {
+      console.log('Real-time habit update:', payload)
+      handleRealTimeUpdate(payload)
     })
 
     return () => {
@@ -117,13 +73,24 @@ export default function HabitTracker() {
     }
   }, [user])
 
+  // Handle real-time updates
+  const handleRealTimeUpdate = (payload: any) => {
+    if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE' || payload.eventType === 'DELETE') {
+      // Refetch habits to get updated data with relations
+      fetchHabits()
+    }
+  }
+
   const fetchHabits = async () => {
     if (!user) return
     try {
+      console.log('Fetching habits for user:', user.id)
       const data = await getHabits(user.id)
+      console.log('Fetched habits:', data.length)
       setHabits(data)
     } catch (error) {
       console.error('Error fetching habits:', error)
+      toast.error('Failed to load habits')
     } finally {
       setLoading(false)
     }
@@ -133,46 +100,78 @@ export default function HabitTracker() {
     if (!user || !newHabit.trim()) return
 
     try {
-      await createHabit({
-        user_id: user.id,
+      const habitInput = {
         title: newHabit.trim(),
         frequency: 'daily',
-        streak_count: 0,
-      })
-      setNewHabit('')
+        habit_type: habitType,
+        frequency_days: frequency,
+      }
+
+      const newHabitData = await createHabit(user.id, habitInput)
+      
+      // Optimistic update
+      setHabits(currentHabits => [newHabitData, ...currentHabits])
+      
+      // Clear form
+      setNewHabit("")
+      setHabitType("builder")
+      setFrequency(["Mon", "Tue", "Wed", "Thu", "Fri"])
+      setDialogOpen(false)
+      
+      toast.success('Habit created successfully')
+      
+      // Refetch to ensure consistency
+      setTimeout(() => {
+        fetchHabits()
+      }, 100)
     } catch (error) {
       console.error('Error creating habit:', error)
+      toast.error('Failed to create habit')
+      fetchHabits() // Refetch on error
     }
   }
 
-  const handleCompleteHabit = async (habitId: string) => {
+  const handleCompleteHabit = async (habitId: string, date?: string) => {
+    const targetDate = date || getTodayFormatted()
+    
+    // Find the habit
+    const habit = habits.find(h => h.id === habitId)
+    if (!habit) return
+
+    // Check if already completed for this date
+    const isCompleted = isHabitCompletedOnDate(habit, targetDate)
+    
     try {
-      await completeHabit(habitId)
+      if (isCompleted) {
+        // Uncomplete the habit
+        await uncompleteHabit(habitId, targetDate)
+        toast.success('Habit unmarked')
+      } else {
+        // Complete the habit
+        await completeHabit({ 
+          habit_id: habitId, 
+          completed_at: new Date(`${targetDate}T12:00:00Z`).toISOString() 
+        })
+        toast.success('Habit completed!')
+      }
     } catch (error) {
-      console.error('Error completing habit:', error)
+      console.error('Error toggling habit completion:', error)
+      toast.error('Failed to update habit')
     }
   }
 
-  const addHabit = () => {
-    if (!newHabit.trim()) return
-
-    const today = getTodayFormatted()
-
-    const habit: Habit = {
-      id: generateId(),
-      name: newHabit,
-      type: habitType,
-      frequency,
-      streak_count: 0,
-      habit_completions: [{ completed_at: today }],
-      createdAt: new Date().toISOString(),
+  const handleDeleteHabit = async (habitId: string) => {
+    // Optimistic update
+    setHabits(currentHabits => currentHabits.filter(h => h.id !== habitId))
+    
+    try {
+      await deleteHabit(habitId)
+      toast.success('Habit deleted')
+    } catch (error) {
+      console.error('Error deleting habit:', error)
+      toast.error('Failed to delete habit')
+      fetchHabits() // Refetch on error
     }
-
-    setHabits([...habits, habit])
-    setNewHabit("")
-    setHabitType("builder")
-    setFrequency(["Mon", "Tue", "Wed", "Thu", "Fri"])
-    setDialogOpen(false)
   }
 
   const toggleDay = (day: string) => {
@@ -183,80 +182,32 @@ export default function HabitTracker() {
     }
   }
 
-  const deleteHabit = (id: string) => {
-    setHabits(habits.filter((habit) => habit.id !== id))
-  }
-
-  const toggleHabitCompletion = (habitId: string) => {
-    const today = getTodayFormatted()
-
-    setHabits(
-      habits.map((habit) => {
-        if (habit.id !== habitId) return habit
-
-        // Check if we already have an entry for today
-        const todayEntry = habit.habit_completions.find((entry) => entry.completed_at.split('T')[0] === today)
-
-        let newHabitCompletions
-        let newStreak = habit.streak_count
-
-        if (todayEntry) {
-          // Toggle the existing entry
-          newHabitCompletions = habit.habit_completions.map((entry) =>
-            entry.completed_at.split('T')[0] === today ? { ...entry, completed_at: today } : entry,
-          )
-
-          // Update streak
-          if (!todayEntry.completed_at.split('T')[0] === today) {
-            // If we're marking it complete
-            newStreak += 1
-          } else {
-            // If we're marking it incomplete
-            newStreak = Math.max(0, newStreak - 1)
-          }
-        } else {
-          // Add a new entry for today
-          newHabitCompletions = [...habit.habit_completions, { completed_at: today }]
-          newStreak += 1
-        }
-
-        return {
-          ...habit,
-          habit_completions: newHabitCompletions,
-          streak_count: newStreak,
-        }
-      }),
-    )
-  }
-
-  // Modified filteredHabits to ensure it works as expected
-  const filteredHabits = activeTab === "all" 
-    ? habits 
-    : habits.filter(habit => habit.frequency === activeTab)
-
-  // Debug function to log current state
-  const debugHabits = () => {
-    console.log('All habits:', habits)
-    console.log('Active tab:', activeTab)
-    console.log('Filtered habits:', filteredHabits)
-    console.log('Are there habits to show?', filteredHabits.length > 0)
-  }
-
-  // Call debug function
-  debugHabits()
-
-  const isHabitDueToday = (habit: Habit) => {
+  const isHabitDueToday = (habit: HabitWithCompletions) => {
+    const metadata = parseHabitMetadata(habit.description)
+    if (metadata.frequency_days.length === 0) return true // Daily habit
+    
     const today = new Date()
     const dayOfWeek = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][today.getDay()]
-    return habit.frequency.includes(dayOfWeek)
+    return metadata.frequency_days.includes(dayOfWeek)
   }
 
-  const isHabitCompletedToday = (habit: Habit) => {
-    const today = getTodayFormatted()
+  const isHabitCompletedOnDate = (habit: HabitWithCompletions, date: string) => {
     return habit.habit_completions.some(
-      (completion) => completion.completed_at.split('T')[0] === today
+      (completion) => completion.completed_at.split('T')[0] === date
     )
   }
+
+  const isHabitCompletedToday = (habit: HabitWithCompletions) => {
+    return isHabitCompletedOnDate(habit, getTodayFormatted())
+  }
+
+  // Filter logic
+  const filteredHabits = habits.filter(habit => {
+    if (activeTab === "all") return true
+    if (activeTab === "daily") return habit.frequency === 'daily'
+    if (activeTab === "weekly") return habit.frequency === 'weekly'
+    return true
+  })
 
   const buttonVariants = {
     hover: { scale: 1.05 },
@@ -264,7 +215,11 @@ export default function HabitTracker() {
   }
 
   if (loading) {
-    return <div>Loading habits...</div>
+    return (
+      <div className="flex justify-center items-center py-20">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+      </div>
+    )
   }
 
   return (
@@ -365,7 +320,7 @@ export default function HabitTracker() {
                 Cancel
               </Button>
               <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-                <Button onClick={addHabit}>Create Habit</Button>
+                <Button onClick={handleCreateHabit}>Create Habit</Button>
               </motion.div>
             </DialogFooter>
           </DialogContent>
@@ -382,7 +337,7 @@ export default function HabitTracker() {
         </Tabs>
       </motion.div>
 
-      {/* Render empty state or habit cards */}
+      {/* Render habits or empty state */}
       {filteredHabits.length === 0 ? (
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -408,81 +363,108 @@ export default function HabitTracker() {
           </div>
         </motion.div>
       ) : (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {filteredHabits.map((habit) => (
-            <Card
-              key={habit.id}
-              className={`
-                overflow-hidden transition-all duration-200 hover:shadow-md
-                ${!isHabitDueToday(habit) ? "opacity-70" : ""}
-                ${isHabitCompletedToday(habit) ? "border-green-500 dark:border-green-700 bg-green-50/30 dark:bg-green-900/10" : ""}
-              `}
-            >
-              <CardHeader className="pb-2">
-                <div className="flex justify-between items-start">
-                  <div className="space-y-1">
-                    <CardTitle className="flex items-center gap-2">
-                      {habit.type === "builder" ? (
-                        <ArrowUp className="h-4 w-4 text-green-500" />
-                      ) : (
-                        <ArrowDown className="h-4 w-4 text-red-500" />
-                      )}
-                      {habit.name}
-                      {habit.streak_count > 0 && (
-                        <Badge variant="outline" className="flex items-center gap-1 ml-2">
-                          <Flame className="h-3 w-3 text-orange-500" />
-                          {habit.streak_count}
-                        </Badge>
-                      )}
-                    </CardTitle>
-                    <div className="flex gap-1 text-xs text-muted-foreground">
-                      {habit.frequency.map((day) => (
-                        <span key={day} className="px-1">
-                          {day}
-                        </span>
-                      ))}
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.2 }}
+          className="grid gap-4 md:grid-cols-2 lg:grid-cols-3"
+        >
+          {filteredHabits.map((habit) => {
+            const metadata = parseHabitMetadata(habit.description)
+            const isDueToday = isHabitDueToday(habit)
+            const isCompletedToday = isHabitCompletedToday(habit)
+            
+            return (
+              <motion.div
+                key={habit.id}
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.95 }}
+                whileHover={{ scale: 1.02 }}
+                transition={{ duration: 0.2 }}
+              >
+                <Card
+                  className={`
+                    overflow-hidden transition-all duration-200 hover:shadow-md
+                    ${!isDueToday ? "opacity-70" : ""}
+                    ${isCompletedToday ? "border-green-500 dark:border-green-700 bg-green-50/30 dark:bg-green-900/10" : ""}
+                  `}
+                >
+                  <CardHeader className="pb-2">
+                    <div className="flex justify-between items-start">
+                      <div className="space-y-1">
+                        <CardTitle className="flex items-center gap-2">
+                          {metadata.type === "builder" ? (
+                            <ArrowUp className="h-4 w-4 text-green-500" />
+                          ) : (
+                            <ArrowDown className="h-4 w-4 text-red-500" />
+                          )}
+                          {habit.title}
+                          {habit.streak_count > 0 && (
+                            <Badge variant="outline" className="flex items-center gap-1 ml-2">
+                              <Flame className="h-3 w-3 text-orange-500" />
+                              {habit.streak_count}
+                            </Badge>
+                          )}
+                        </CardTitle>
+                        <div className="flex gap-1 text-xs text-muted-foreground">
+                          {metadata.frequency_days.length > 0 ? (
+                            metadata.frequency_days.map((day) => (
+                              <span key={day} className="px-1">
+                                {day}
+                              </span>
+                            ))
+                          ) : (
+                            <span>Daily</span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleCompleteHabit(habit.id)}
+                          disabled={!isDueToday}
+                          className={isCompletedToday ? "text-green-500" : ""}
+                        >
+                          {isCompletedToday ? <X className="h-5 w-5" /> : <Check className="h-5 w-5" />}
+                        </Button>
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          onClick={() => handleDeleteHabit(habit.id)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
                     </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => toggleHabitCompletion(habit.id)}
-                      disabled={!isHabitDueToday(habit)}
-                      className={isHabitCompletedToday(habit) ? "text-green-500" : ""}
-                    >
-                      {isHabitCompletedToday(habit) ? <X className="h-5 w-5" /> : <Check className="h-5 w-5" /> }
-                    </Button>
-                    <Button variant="ghost" size="icon" onClick={() => deleteHabit(habit.id)}>
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="flex gap-1 mt-2">
-                  {Array.from({ length: 7 }).map((_, i) => {
-                    const date = new Date()
-                    date.setDate(date.getDate() - 6 + i)
-                    const dateStr = date.toISOString().split("T")[0]
-                    const entry = habit.habit_completions.find((h) => h.completed_at.split('T')[0] === dateStr)
+                  </CardHeader>
+                  <CardContent>
+                    <div className="flex gap-1 mt-2">
+                      {Array.from({ length: 7 }).map((_, i) => {
+                        const date = new Date()
+                        date.setDate(date.getDate() - 6 + i)
+                        const dateStr = date.toISOString().split("T")[0]
+                        const isCompleted = isHabitCompletedOnDate(habit, dateStr)
 
-                    return (
-                      <div
-                        key={i}
-                        className={`
-                          flex-1 h-2 rounded-full
-                          ${entry?.completed_at ? "bg-green-500 dark:bg-green-700" : "bg-muted"}
-                        `}
-                        title={dateStr}
-                      />
-                    )
-                  })}
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+                        return (
+                          <div
+                            key={i}
+                            className={`
+                              flex-1 h-2 rounded-full transition-colors
+                              ${isCompleted ? "bg-green-500 dark:bg-green-700" : "bg-muted"}
+                            `}
+                            title={dateStr}
+                          />
+                        )
+                      })}
+                    </div>
+                  </CardContent>
+                </Card>
+              </motion.div>
+            )
+          })}
+        </motion.div>
       )}
     </div>
   )
