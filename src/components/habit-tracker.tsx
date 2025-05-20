@@ -90,7 +90,7 @@ export default function HabitTracker() {
   const [habitType, setHabitType] = useState<HabitType>("builder")
   const [frequency, setFrequency] = useState<string[]>(["Mon", "Tue", "Wed", "Thu", "Fri"])
   const [dialogOpen, setDialogOpen] = useState(false)
-  const [activeTab, setActiveTab] = useState<"all" | "builder" | "quitter">("all")
+  const [activeTab, setActiveTab] = useState<"all" | "daily" | "weekly">("all")
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -232,7 +232,7 @@ export default function HabitTracker() {
   // Modified filteredHabits to ensure it works as expected
   const filteredHabits = activeTab === "all" 
     ? habits 
-    : habits.filter(habit => habit.type === activeTab)
+    : habits.filter(habit => habit.frequency === activeTab)
 
   // Debug function to log current state
   const debugHabits = () => {
@@ -373,19 +373,11 @@ export default function HabitTracker() {
       </motion.div>
 
       <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
-        <Tabs defaultValue="all" value={activeTab} onValueChange={(value) => setActiveTab(value as never)}>
-          <TabsList className="mb-4 bg-muted/50 p-1 rounded-xl">
-            <TabsTrigger value="all" className="rounded-lg data-[state=active]:shadow-md">
-              All
-            </TabsTrigger>
-            <TabsTrigger value="builder" className="rounded-lg data-[state=active]:shadow-md flex items-center gap-1">
-              <ArrowUp className="h-3.5 w-3.5" />
-              Builders
-            </TabsTrigger>
-            <TabsTrigger value="quitter" className="rounded-lg data-[state=active]:shadow-md flex items-center gap-1">
-              <ArrowDown className="h-3.5 w-3.5" />
-              Quitters
-            </TabsTrigger>
+        <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as typeof activeTab)}>
+          <TabsList className="grid w-full grid-cols-3">
+            <TabsTrigger value="all">All</TabsTrigger>
+            <TabsTrigger value="daily">Daily</TabsTrigger>
+            <TabsTrigger value="weekly">Weekly</TabsTrigger>
           </TabsList>
         </Tabs>
       </motion.div>
@@ -416,7 +408,7 @@ export default function HabitTracker() {
           </div>
         </motion.div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {filteredHabits.map((habit) => (
             <Card
               key={habit.id}

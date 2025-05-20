@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react"
 import { motion } from "framer-motion"
-import { Plus, Trash2, Edit, Save, StickyNote, FileText, Clock, Sparkles, Bold, Italic, Underline, AlignLeft, AlignCenter, AlignRight, List, ListOrdered, Image, Palette, Type } from "lucide-react"
+import { Plus, Trash2, Edit, Save, StickyNote, FileText, Clock, Sparkles, Bold, Italic, Underline, AlignLeft, AlignCenter, AlignRight, List, ListOrdered, Image, Palette, Type, Tag } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -14,21 +14,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Separator } from "@/components/ui/separator"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
+import { useAuth } from '@/hooks/useAuth'
+import { getNotes, createNote, updateNote, subscribeToChanges } from '@/lib/utils/database'
+import { Database } from '@/lib/types/database'
 
-// Define types
-type Note = {
-  id: string
-  title: string
-  content: string
-  contentType: "richtext" | "drawing" | "plain"
-  createdAt: string
-  updatedAt: string
-  styleConfig?: {
-    fontFamily?: string
-    fontSize?: string
-    backgroundColor?: string
-  }
-}
+type Note = Database['public']['Tables']['notes']['Row']
 
 // Helper functions
 const generateId = (): string => {
@@ -556,368 +546,183 @@ const DrawingCanvas = ({
 
 // Main component
 export default function Notes() {
-  // Use lazy initialization for notes state
-  const [notes, setNotes] = useState<Note[]>(() => {
-    // This function only runs once during initial render
-    if (typeof window !== 'undefined') {
-      const storedNotes = localStorage.getItem('notes')
-      if (storedNotes) {
-        try {
-          const parsed = JSON.parse(storedNotes)
-          console.log('Initially loaded notes:', parsed)
-          return Array.isArray(parsed) ? parsed : []
-        } catch (error) {
-          console.error('Error parsing initial notes:', error)
-        }
+  const { user } = useAuth()
+  const [notes, setNotes] = useState<Note[]>([])
+  const [newNote, setNewNote] = useState({ title: '', content: '', color: '#ffffff' })
+  const [loading, setLoading] = useState(true)
+  const [editingNote, setEditingNote] = useState<Note | null>(null)
+
+  useEffect(() => {
+    if (!user) return
+
+    // Fetch initial notes
+    fetchNotes()
+
+    // Subscribe to real-time updates
+    const subscription = subscribeToChanges('notes', (payload) => {
+      if (payload.event === 'INSERT') {
+        setNotes((prev) => [payload.new as Note, ...prev])
+      } else if (payload.event === 'UPDATE') {
+        setNotes((prev) =>
+          prev.map((note) => (note.id === payload.new?.id ? (payload.new as Note) : note))
+        )
+      } else if (payload.event === 'DELETE') {
+        setNotes((prev) => prev.filter((note) => note.id !== payload.old?.id))
       }
-    }
-    return []
-  })
-  
-  const [newNoteTitle, setNewNoteTitle] = useState("")
-  const [newNoteContent, setNewNoteContent] = useState("")
-  const [newNoteType, setNewNoteType] = useState<"richtext" | "drawing" | "plain">("richtext")
-  const [dialogOpen, setDialogOpen] = useState(false)
-  const [editingNote, setEditingNote] = useState<string | null>(null)
-  const [styleConfig, setStyleConfig] = useState<{ fontFamily?: string, fontSize?: string, backgroundColor?: string }>({})
-
-  // Backup loading from localStorage on component mount
-  useEffect(() => {
-    console.log('Component mounted, loading notes from localStorage')
-    const loadedNotes = getNotesFromLocalStorage()
-    console.log('Loaded notes:', loadedNotes)
-    
-    // Only set notes if we actually found some
-    if (loadedNotes.length > 0) {
-      setNotes(loadedNotes)
-    }
-    
-    // Manually check localStorage content
-    debugLocalStorage()
-  }, [])
-
-  // Save notes to localStorage whenever they change
-  useEffect(() => {
-    console.log('Saving notes to localStorage:', notes)
-    saveNotesToLocalStorage(notes)
-  }, [notes])
-
-  const addNote = () => {
-    if (!newNoteTitle.trim()) return
-
-    const note: Note = {
-      id: generateId(),
-      title: newNoteTitle,
-      content: newNoteContent,
-      contentType: newNoteType,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      styleConfig
-    }
-
-    setNotes([...notes, note])
-    setNewNoteTitle("")
-    setNewNoteContent("")
-    setNewNoteType("richtext")
-    setStyleConfig({})
-    setDialogOpen(false)
-  }
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const updateNote = (id: string, content: string, contentType?: "richtext" | "drawing" | "plain", newStyleConfig?: any) => {
-    setNotes(
-      notes.map((note) =>
-        note.id === id
-          ? {
-              ...note,
-              content,
-              ...(contentType && { contentType }),
-              ...(newStyleConfig && { styleConfig: { ...note.styleConfig, ...newStyleConfig } }),
-              updatedAt: new Date().toISOString(),
-            }
-          : note,
-      ),
-    )
-    setEditingNote(null)
-  }
-
-  const deleteNote = (id: string) => {
-    setNotes(notes.filter((note) => note.id !== id))
-  }
-
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString)
-    return date.toLocaleDateString(undefined, {
-      month: "short",
-      day: "numeric",
-      year: date.getFullYear() !== new Date().getFullYear() ? "numeric" : undefined,
-      hour: "2-digit",
-      minute: "2-digit",
     })
+
+    return () => {
+      subscription.unsubscribe()
+    }
+  }, [user])
+
+  const fetchNotes = async () => {
+    if (!user) return
+    try {
+      const data = await getNotes(user.id)
+      setNotes(data)
+    } catch (error) {
+      console.error('Error fetching notes:', error)
+    } finally {
+      setLoading(false)
+    }
   }
 
-  // Sort notes by updated date (newest first)
-  const sortedNotes = [...notes].sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+  const handleCreateNote = async () => {
+    if (!user || !newNote.title.trim()) return
 
-  // Debug function to log current state
-  const debugNotes = () => {
-    console.log('All notes:', notes)
-    console.log('Sorted notes:', sortedNotes)
-    console.log('Are there notes to show?', notes.length > 0)
-    console.log('Currently editing note:', editingNote)
+    try {
+      await createNote({
+        user_id: user.id,
+        title: newNote.title.trim(),
+        content: newNote.content.trim(),
+        color: newNote.color,
+        tags: [],
+      })
+      setNewNote({ title: '', content: '', color: '#ffffff' })
+    } catch (error) {
+      console.error('Error creating note:', error)
+    }
   }
 
-  // Call debug function
-  debugNotes()
+  const handleUpdateNote = async (note: Note) => {
+    try {
+      await updateNote(note.id, {
+        title: note.title,
+        content: note.content,
+        color: note.color,
+      })
+      setEditingNote(null)
+    } catch (error) {
+      console.error('Error updating note:', error)
+    }
+  }
+
+  const handleDeleteNote = async (noteId: string) => {
+    try {
+      await updateNote(noteId, { title: '', content: '' }) // Soft delete
+    } catch (error) {
+      console.error('Error deleting note:', error)
+    }
+  }
+
+  if (loading) {
+    return <div>Loading notes...</div>
+  }
 
   return (
-    <div className="space-y-6">
-      <motion.div
-        className="flex justify-between items-center"
-        initial={{ opacity: 0, y: -10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.3 }}
-      >
-        <div className="flex items-center gap-2">
-          <h2 className="text-2xl font-bold">Notes</h2>
-          <motion.div
-            initial={{ rotate: 0 }}
-            animate={{ rotate: [0, 15, 0, -15, 0] }}
-            transition={{ duration: 2, repeat: Number.POSITIVE_INFINITY, repeatDelay: 5 }}
-          >
-            <StickyNote className="h-5 w-5 text-purple-500" />
-          </motion.div>
-        </div>
-        
-        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-  <DialogTrigger asChild>
-    <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-      <Button className="flex items-center gap-2 rounded-full shadow-md">
-        <Plus className="h-4 w-4" />
-        <span>New Note</span>
-      </Button>
-    </motion.div>
-  </DialogTrigger>
-  <DialogContent className="sm:max-w-lg">
-    <DialogHeader>
-      <DialogTitle className="flex items-center gap-2">
-        <FileText className="h-5 w-5 text-primary" />
-        Create a New Note
-      </DialogTitle>
-    </DialogHeader>
-    <div className="space-y-4 py-4">
-      <div className="space-y-2">
-        <Label htmlFor="note-title">Title</Label>
-        <Input
-          id="note-title"
-          placeholder="Give your note a title..."
-          value={newNoteTitle}
-          onChange={(e) => setNewNoteTitle(e.target.value)}
-          className="focus-visible:ring-primary"
-        />
-      </div>
-
-      <Tabs 
-        defaultValue="richtext" 
-        onValueChange={(value) => setNewNoteType(value as never)}
-        className="space-y-4"
-      >
-        <TabsList className="grid grid-cols-3">
-          <TabsTrigger value="richtext">Rich Text</TabsTrigger>
-          <TabsTrigger value="drawing">Drawing</TabsTrigger>
-          <TabsTrigger value="plain">Plain Text</TabsTrigger>
-        </TabsList>
-        
-        <TabsContent value="richtext" className="space-y-4">
-          <RichTextEditor 
-            initialValue={newNoteContent} 
-            onChange={setNewNoteContent}
-            styleConfig={styleConfig}
+    <div className="space-y-4">
+      <Card className="p-4">
+        <div className="space-y-4">
+          <Input
+            value={newNote.title}
+            onChange={(e) => setNewNote({ ...newNote, title: e.target.value })}
+            placeholder="Note title..."
           />
-        </TabsContent>
-        
-        <TabsContent value="drawing" className="space-y-4">
-          <DrawingCanvas
-            initialValue={newNoteContent}
-            onChange={setNewNoteContent}
-          />
-        </TabsContent>
-        
-        <TabsContent value="plain" className="space-y-4">
           <Textarea
-            placeholder="What's on your mind?"
-            rows={6}
-            value={newNoteContent}
-            onChange={(e) => setNewNoteContent(e.target.value)}
-            className="focus-visible:ring-primary resize-none"
+            value={newNote.content}
+            onChange={(e) => setNewNote({ ...newNote, content: e.target.value })}
+            placeholder="Write your note here..."
+            className="min-h-[100px]"
           />
-        </TabsContent>
-      </Tabs>
-    </div>
-    <DialogFooter>
-      <Button variant="outline" onClick={() => setDialogOpen(false)}>
-        Cancel
-      </Button>
-      <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-        <Button onClick={addNote}>Save Note</Button>
-      </motion.div>
-    </DialogFooter>
-  </DialogContent>
-</Dialog>
-        
-      </motion.div>
-  
-      {notes.length === 0 ? (
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2 }}
-          className="text-center py-16 border rounded-lg bg-muted/20"
-        >
-          <div className="flex flex-col items-center gap-2">
-            <motion.div
-              initial={{ scale: 0 }}
-              animate={{ scale: 1 }}
-              transition={{ type: "spring", stiffness: 260, damping: 20, delay: 0.3 }}
-            >
-              <StickyNote className="h-12 w-12 text-muted-foreground/50 mb-2" />
-            </motion.div>
-            <p className="text-muted-foreground">No notes yet. Capture your thoughts and ideas!</p>
-            <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} className="mt-4">
-              <Button variant="outline" onClick={() => setDialogOpen(true)} className="mt-2">
-                <Plus className="h-4 w-4 mr-2" />
-                Create Your First Note
-              </Button>
-            </motion.div>
+          <div className="flex justify-between items-center">
+            <input
+              type="color"
+              value={newNote.color}
+              onChange={(e) => setNewNote({ ...newNote, color: e.target.value })}
+              className="w-8 h-8 rounded cursor-pointer"
+            />
+            <Button onClick={handleCreateNote}>
+              <Plus className="h-4 w-4 mr-2" />
+              Add Note
+            </Button>
           </div>
-        </motion.div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {sortedNotes.map((note) => (
-            <Card 
+        </div>
+      </Card>
+
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+        {notes
+          .filter((note) => note.title || note.content)
+          .map((note) => (
+            <Card
               key={note.id}
-              className="overflow-hidden transition-all duration-200 hover:shadow-md h-full flex flex-col"
+              className="p-4"
+              style={{ backgroundColor: note.color || '#ffffff' }}
             >
-              <CardHeader className="pb-2 relative">
-                <div className="absolute -top-1 -right-1">
-                  <Sparkles className="h-4 w-4 text-amber-400" />
-                </div>
-                <CardTitle className="pr-4">{note.title}</CardTitle>
-              </CardHeader>
-              <CardContent className="flex-grow">
-                {editingNote === note.id ? (
-                  <div className="space-y-4">
-                    <Tabs defaultValue={note.contentType || "richtext"}>
-                      <TabsList className="grid grid-cols-3">
-                        <TabsTrigger value="richtext">Rich Text</TabsTrigger>
-                        <TabsTrigger value="drawing">Drawing</TabsTrigger>
-                        <TabsTrigger value="plain">Plain Text</TabsTrigger>
-                      </TabsList>
-                      
-                      <TabsContent value="richtext">
-                        <RichTextEditor 
-                          initialValue={note.content} 
-                          onChange={(value) => updateNote(note.id, value, "richtext")}
-                          styleConfig={note.styleConfig}
-                        />
-                      </TabsContent>
-                      
-                      <TabsContent value="drawing">
-                        <DrawingCanvas
-                          initialValue={note.contentType === "drawing" ? note.content : ""}
-                          onChange={(value) => updateNote(note.id, value, "drawing")}
-                        />
-                      </TabsContent>
-                      
-                      <TabsContent value="plain">
-                        <Textarea
-                          defaultValue={note.contentType === "plain" ? note.content : ""}
-                          rows={5}
-                          id={`edit-note-${note.id}`}
-                          className="focus-visible:ring-primary resize-none"
-                          onChange={(e) => updateNote(note.id, e.target.value, "plain")}
-                        />
-                      </TabsContent>
-                    </Tabs>
-                  </div>
-                ) : (
-                  <div>
-                    {note.contentType === "richtext" && (
-                      <div 
-                        className="rich-text-content"
-                        style={{
-                          fontFamily: note.styleConfig?.fontFamily,
-                          fontSize: note.styleConfig?.fontSize,
-                          backgroundColor: note.styleConfig?.backgroundColor
-                        }}
-                        dangerouslySetInnerHTML={{ __html: note.content }}
-                      />
-                    )}
-                    
-                    {note.contentType === "drawing" && note.content && (
-                      <div className="drawing-content">
-                        <img 
-                          src={note.content} 
-                          alt="Drawing" 
-                          className="max-w-full rounded-md border"
-                        />
-                      </div>
-                    )}
-                    
-                    {note.contentType === "plain" && (
-                      <div className="whitespace-pre-wrap break-words">
-                        {note.content || <span className="text-muted-foreground italic">No content</span>}
-                      </div>
-                    )}
-                    
-                    {!note.content && !note.contentType && (
-                      <span className="text-muted-foreground italic">No content</span>
-                    )}
-                  </div>
-                )}
-              </CardContent>
-              <CardFooter className="flex justify-between text-xs text-muted-foreground pt-2 border-t">
-                <span className="flex items-center gap-1">
-                  <Clock className="h-3 w-3" />
-                  {formatDate(note.updatedAt)}
-                </span>
-                <div className="flex gap-2">
-                  {editingNote === note.id ? (
+              {editingNote?.id === note.id ? (
+                <div className="space-y-2">
+                  <Input
+                    value={editingNote.title}
+                    onChange={(e) =>
+                      setEditingNote({ ...editingNote, title: e.target.value })
+                    }
+                  />
+                  <Textarea
+                    value={editingNote.content || ''}
+                    onChange={(e) =>
+                      setEditingNote({ ...editingNote, content: e.target.value })
+                    }
+                    className="min-h-[100px]"
+                  />
+                  <div className="flex justify-end gap-2">
                     <Button
                       variant="outline"
-                      size="sm"
                       onClick={() => setEditingNote(null)}
-                      className="rounded-full"
                     >
-                      <Save className="h-4 w-4 mr-1" />
-                      Done
+                      Cancel
                     </Button>
-                  ) : (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setEditingNote(note.id)}
-                      className="rounded-full"
-                    >
-                      <Edit className="h-4 w-4 mr-1" />
-                      Edit
+                    <Button onClick={() => handleUpdateNote(editingNote)}>
+                      Save
                     </Button>
-                  )}
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => deleteNote(note.id)}
-                    className="rounded-full"
-                  >
-                    <Trash2 className="h-4 w-4 mr-1" />
-                    Delete
-                  </Button>
+                  </div>
                 </div>
-              </CardFooter>
+              ) : (
+                <div className="space-y-2">
+                  <div className="flex justify-between items-start">
+                    <h3 className="font-medium">{note.title}</h3>
+                    <div className="flex gap-1">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => setEditingNote(note)}
+                      >
+                        <Tag className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleDeleteNote(note.id)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                  <p className="text-sm whitespace-pre-wrap">{note.content}</p>
+                </div>
+              )}
             </Card>
           ))}
-        </div>
-      )}
+      </div>
     </div>
-  );
+  )
 }
