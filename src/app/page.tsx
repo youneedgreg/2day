@@ -60,14 +60,39 @@ export default function Home() {
     // Add listener for window resize
     window.addEventListener('resize', checkIfMobile)
     
-    // Check authentication state
+    // Check authentication state and set up session listener
     const checkAuth = async () => {
-      const { data: { session } } = await supabase.auth.getSession()
-      if (!session) {
+      try {
+        const { data: { session }, error } = await supabase.auth.getSession()
+        
+        if (error) {
+          console.error('Auth error:', error.message)
+          router.push('/login')
+          return
+        }
+
+        if (!session) {
+          router.push('/login')
+          return
+        }
+
+        // Set up auth state change listener
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+          if (event === 'SIGNED_OUT' || !session) {
+            router.push('/login')
+          }
+        })
+
+        setIsLoading(false)
+
+        // Cleanup subscription
+        return () => {
+          subscription.unsubscribe()
+        }
+      } catch (error) {
+        console.error('Auth check error:', error)
         router.push('/login')
-        return
       }
-      setIsLoading(false)
     }
     
     checkAuth()
