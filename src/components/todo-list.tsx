@@ -96,7 +96,67 @@ export default function TodoList() {
   const handleCreateTodo = async () => {
     if (!user || !newTodo.trim()) return
 
+    // Create optimistic todo object
+    const optimisticTodo: TodoWithRelations = {
+      id: `temp-${Date.now()}`, // Temporary ID
+      title: newTodo.trim(),
+      status: 'pending',
+      user_id: user.id,
+      parent_id: newTodoParentId,
+      is_expanded: true,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      children: [],
+      notes: [],
+      ...(newTodoHasTimer && {
+        timer: {
+          id: `temp-timer-${Date.now()}`,
+          todo_id: `temp-${Date.now()}`,
+          duration_minutes: newTodoTimerDuration,
+          is_running: false,
+          completed: false,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        }
+      })
+    }
+
+    // Optimistically update the UI
+    setTodos(prevTodos => {
+      if (newTodoParentId) {
+        // If it's a subtask, find the parent and add to its children
+        const updateChildren = (todos: TodoWithRelations[]): TodoWithRelations[] => {
+          return todos.map(todo => {
+            if (todo.id === newTodoParentId) {
+              return {
+                ...todo,
+                children: [...(todo.children || []), optimisticTodo]
+              }
+            }
+            if (todo.children) {
+              return {
+                ...todo,
+                children: updateChildren(todo.children)
+              }
+            }
+            return todo
+          })
+        }
+        return updateChildren(prevTodos)
+      }
+      // If it's a top-level todo, add it to the root
+      return [...prevTodos, optimisticTodo]
+    })
+
+    // Clear form state
+    setNewTodo('')
+    setNewTodoHasTimer(false)
+    setNewTodoTimerDuration(25)
+    setNewTodoDialogOpen(false)
+    setNewTodoParentId(undefined)
+
     try {
+      // Make the actual API call
       const todoInput = {
         title: newTodo.trim(),
         parent_id: newTodoParentId,
@@ -107,14 +167,45 @@ export default function TodoList() {
         })
       }
 
-      await createTodo(user.id, todoInput)
-      setNewTodo('')
-      setNewTodoHasTimer(false)
-      setNewTodoTimerDuration(25)
-      setNewTodoDialogOpen(false)
-      setNewTodoParentId(undefined)
+      const createdTodo = await createTodo(user.id, todoInput)
+      
+      // Update the optimistic todo with the real one
+      setTodos(prevTodos => {
+        const replaceTodo = (todos: TodoWithRelations[]): TodoWithRelations[] => {
+          return todos.map(todo => {
+            if (todo.id === optimisticTodo.id) {
+              return createdTodo
+            }
+            if (todo.children) {
+              return {
+                ...todo,
+                children: replaceTodo(todo.children)
+              }
+            }
+            return todo
+          })
+        }
+        return replaceTodo(prevTodos)
+      })
+
       toast.success('Todo created successfully')
     } catch (error) {
+      // Revert the optimistic update on error
+      setTodos(prevTodos => {
+        const removeTodo = (todos: TodoWithRelations[]): TodoWithRelations[] => {
+          return todos.filter(todo => {
+            if (todo.id === optimisticTodo.id) {
+              return false
+            }
+            if (todo.children) {
+              todo.children = removeTodo(todo.children)
+            }
+            return true
+          })
+        }
+        return removeTodo(prevTodos)
+      })
+
       console.error('Error creating todo:', error)
       toast.error('Failed to create todo')
     }
