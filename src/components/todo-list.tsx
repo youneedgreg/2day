@@ -102,12 +102,15 @@ export default function TodoList() {
       title: newTodo.trim(),
       status: 'pending',
       user_id: user.id,
-      parent_id: newTodoParentId,
+      parent_id: newTodoParentId || null,
       is_expanded: true,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
       children: [],
       notes: [],
+      description: null,
+      due_date: null,
+      priority: 'medium',
       ...(newTodoHasTimer && {
         timer: {
           id: `temp-timer-${Date.now()}`,
@@ -233,10 +236,57 @@ export default function TodoList() {
   }
 
   const handleDeleteTodo = async (todoId: string) => {
+    // Store the todo being deleted for potential rollback
+    const todoToDelete = findTodoById(todoId)
+    if (!todoToDelete) return
+
+    // Optimistically update the UI
+    setTodos(prevTodos => {
+      const removeTodo = (todos: TodoWithRelations[]): TodoWithRelations[] => {
+        return todos.filter(todo => {
+          if (todo.id === todoId) {
+            return false
+          }
+          if (todo.children) {
+            todo.children = removeTodo(todo.children)
+          }
+          return true
+        })
+      }
+      return removeTodo(prevTodos)
+    })
+
     try {
       await updateTodo(todoId, { status: 'archived' })
       toast.success('Todo deleted')
     } catch (error) {
+      // Revert the optimistic update on error
+      if (todoToDelete) {
+        setTodos(prevTodos => {
+          const restoreTodo = (todos: TodoWithRelations[]): TodoWithRelations[] => {
+            if (todoToDelete.parent_id) {
+              return todos.map(todo => {
+                if (todo.id === todoToDelete.parent_id) {
+                  return {
+                    ...todo,
+                    children: [...(todo.children || []), todoToDelete]
+                  }
+                }
+                if (todo.children) {
+                  return {
+                    ...todo,
+                    children: restoreTodo(todo.children)
+                  }
+                }
+                return todo
+              })
+            }
+            return [...todos, todoToDelete]
+          }
+          return restoreTodo(prevTodos)
+        })
+      }
+
       console.error('Error deleting todo:', error)
       toast.error('Failed to delete todo')
     }
