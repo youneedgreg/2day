@@ -116,6 +116,8 @@ export default function TodoList() {
           id: `temp-timer-${Date.now()}`,
           todo_id: `temp-${Date.now()}`,
           duration_minutes: newTodoTimerDuration,
+          start_time: null,
+          paused_time_remaining: null,
           is_running: false,
           completed: false,
           created_at: new Date().toISOString(),
@@ -303,12 +305,61 @@ export default function TodoList() {
   const handleEditTodo = async (todoId: string, newTitle: string) => {
     if (!newTitle.trim()) return
     
+    // Store the original todo for potential rollback
+    const originalTodo = findTodoById(todoId)
+    if (!originalTodo) return
+
+    // Optimistically update the UI
+    setTodos(prevTodos => {
+      const updateTodoTitle = (todos: TodoWithRelations[]): TodoWithRelations[] => {
+        return todos.map(todo => {
+          if (todo.id === todoId) {
+            return {
+              ...todo,
+              title: newTitle.trim()
+            }
+          }
+          if (todo.children) {
+            return {
+              ...todo,
+              children: updateTodoTitle(todo.children)
+            }
+          }
+          return todo
+        })
+      }
+      return updateTodoTitle(prevTodos)
+    })
+
+    // Clear editing state
+    setEditingTodoId(null)
+    setEditText("")
+    
     try {
       await updateTodo(todoId, { title: newTitle.trim() })
-      setEditingTodoId(null)
-      setEditText("")
       toast.success('Todo updated')
     } catch (error) {
+      // Revert the optimistic update on error
+      if (originalTodo) {
+        setTodos(prevTodos => {
+          const revertTodoTitle = (todos: TodoWithRelations[]): TodoWithRelations[] => {
+            return todos.map(todo => {
+              if (todo.id === todoId) {
+                return originalTodo
+              }
+              if (todo.children) {
+                return {
+                  ...todo,
+                  children: revertTodoTitle(todo.children)
+                }
+              }
+              return todo
+            })
+          }
+          return revertTodoTitle(prevTodos)
+        })
+      }
+
       console.error('Error updating todo:', error)
       toast.error('Failed to update todo')
     }
