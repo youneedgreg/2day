@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 "use client"
 
 import { useState, useEffect } from "react"
@@ -25,79 +24,18 @@ import { Progress } from "@/components/ui/progress"
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerFooter } from "@/components/ui/drawer"
 import { cn } from "@/lib/utils"
 import { useAuth } from '@/hooks/useAuth'
-import { getTodos, createTodo, updateTodo, subscribeToChanges } from '@/lib/utils/database'
-import { Database } from '@/lib/types/database'
-
-// Define types
-type TodoNote = {
-  id: string
-  content: string
-  createdAt: string
-}
-
-type TodoTimer = {
-  duration: number // in minutes
-  startTime?: string // ISO string when timer started
-  pausedTimeRemaining?: number // remaining seconds when paused
-  isRunning: boolean
-  completed: boolean
-}
-
-type Todo = Database['public']['Tables']['todos']['Row']
-
-// Helper functions
-const generateId = (): string => {
-  return Math.random().toString(36).substring(2, 9)
-}
-
-// Local storage functions
-const getTodosFromLocalStorage = (): Todo[] => {
-  if (typeof window === 'undefined') return []
-  
-  const storedTodos = localStorage.getItem('todos')
-  
-  if (!storedTodos) return []
-  
-  try {
-    const parsedTodos = JSON.parse(storedTodos)
-    
-    // Ensure all todos have the required properties
-    const migratedTodos = parsedTodos.map((todo: any) => ({
-      ...todo,
-      notes: todo.notes || [],
-      isExpanded: todo.isExpanded ?? true
-    }))
-    
-    return Array.isArray(migratedTodos) ? migratedTodos : []
-  } catch (error) {
-    console.error('Error parsing todos from localStorage:', error)
-    return []
-  }
-}
-
-const saveTodosToLocalStorage = (todos: Todo[]): void => {
-  if (typeof window === 'undefined') return
-  localStorage.setItem('todos', JSON.stringify(todos))
-}
-
-// Notification helper
-const requestNotificationPermission = async () => {
-  if (!("Notification" in window)) {
-    console.log("This browser does not support notifications")
-    return false
-  }
-  
-  if (Notification.permission === "granted") {
-    return true
-  }
-  
-  if (Notification.permission !== "denied") {
-    const permission = await Notification.requestPermission()
-    return permission === "granted"
-  }
-  
-  return false
-}
+import { 
+  getTodos, 
+  createTodo, 
+  updateTodo, 
+  addNoteToTodo, 
+  deleteNote, 
+  updateTodoTimer,
+  addTimerToTodo,
+  subscribeToTodoChanges,
+  type TodoWithRelations 
+} from '@/lib/utils/database/todos'
+import { toast } from 'sonner'
 
 // Format time function (mm:ss)
 const formatTime = (timeInSeconds: number): string => {
@@ -108,7 +46,7 @@ const formatTime = (timeInSeconds: number): string => {
 
 export default function TodoList() {
   const { user } = useAuth()
-  const [todos, setTodos] = useState<Todo[]>([])
+  const [todos, setTodos] = useState<TodoWithRelations[]>([])
   const [newTodo, setNewTodo] = useState('')
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState<"all" | "active" | "completed">("all")
@@ -116,8 +54,6 @@ export default function TodoList() {
   const [editingTodoId, setEditingTodoId] = useState<string | null>(null)
   const [editText, setEditText] = useState("")
   const [activeTimers, setActiveTimers] = useState<{[key: string]: number}>({})
-  const [notificationsEnabled, setNotificationsEnabled] = useState(false)
-  const [timerNotifications, setTimerNotifications] = useState<{[key: string]: boolean}>({})
   const [selectedTodoForNote, setSelectedTodoForNote] = useState<string | null>(null)
   const [newNoteContent, setNewNoteContent] = useState("")
   const [newTodoDialogOpen, setNewTodoDialogOpen] = useState(false)
@@ -129,20 +65,14 @@ export default function TodoList() {
   useEffect(() => {
     if (!user) return
 
-    // Fetch initial todos
     fetchTodos()
 
     // Subscribe to real-time updates
-    const subscription = subscribeToChanges('todos', (payload) => {
-      if (payload.event === 'INSERT') {
-        setTodos((prev) => [payload.new as Todo, ...prev])
-      } else if (payload.event === 'UPDATE') {
-        setTodos((prev) =>
-          prev.map((todo) => (todo.id === payload.new?.id ? (payload.new as Todo) : todo))
-        )
-      } else if (payload.event === 'DELETE') {
-        setTodos((prev) => prev.filter((todo) => todo.id !== payload.old?.id))
-      }
+    const subscription = subscribeToTodoChanges(user.id, (payload) => {
+      console.log('Real-time update:', payload)
+      // Refetch todos on any change for simplicity
+      // In production, you might want to handle specific events for better performance
+      fetchTodos()
     })
 
     return () => {
@@ -157,6 +87,7 @@ export default function TodoList() {
       setTodos(data)
     } catch (error) {
       console.error('Error fetching todos:', error)
+      toast.error('Failed to load todos')
     } finally {
       setLoading(false)
     }
@@ -166,397 +97,289 @@ export default function TodoList() {
     if (!user || !newTodo.trim()) return
 
     try {
-      await createTodo({
-        user_id: user.id,
+      const todoInput = {
         title: newTodo.trim(),
-        status: 'pending',
-      })
+        parent_id: newTodoParentId,
+        ...(newTodoHasTimer && {
+          timer: {
+            duration_minutes: newTodoTimerDuration
+          }
+        })
+      }
+
+      await createTodo(user.id, todoInput)
       setNewTodo('')
+      setNewTodoHasTimer(false)
+      setNewTodoTimerDuration(25)
+      setNewTodoDialogOpen(false)
+      setNewTodoParentId(undefined)
+      toast.success('Todo created successfully')
     } catch (error) {
       console.error('Error creating todo:', error)
+      toast.error('Failed to create todo')
     }
   }
 
-  const handleToggleTodo = async (todo: Todo) => {
+  const handleToggleTodo = async (todo: TodoWithRelations) => {
     try {
       await updateTodo(todo.id, {
         status: todo.status === 'completed' ? 'pending' : 'completed',
       })
+      
+      // If completing a todo with a running timer, stop the timer
+      if (todo.status === 'pending' && todo.timer?.is_running) {
+        await updateTodoTimer(todo.id, {
+          is_running: false,
+          completed: true
+        })
+      }
+      
+      toast.success(todo.status === 'pending' ? 'Todo completed!' : 'Todo reopened')
     } catch (error) {
       console.error('Error updating todo:', error)
+      toast.error('Failed to update todo')
     }
   }
 
   const handleDeleteTodo = async (todoId: string) => {
     try {
       await updateTodo(todoId, { status: 'archived' })
+      toast.success('Todo deleted')
     } catch (error) {
       console.error('Error deleting todo:', error)
+      toast.error('Failed to delete todo')
     }
   }
 
-  // Timer update effect with improved dependency management
+  const handleUpdateExpansion = async (todoId: string, isExpanded: boolean) => {
+    try {
+      await updateTodo(todoId, { is_expanded: isExpanded })
+    } catch (error) {
+      console.error('Error updating expansion:', error)
+    }
+  }
+
+  const handleEditTodo = async (todoId: string, newTitle: string) => {
+    if (!newTitle.trim()) return
+    
+    try {
+      await updateTodo(todoId, { title: newTitle.trim() })
+      setEditingTodoId(null)
+      setEditText("")
+      toast.success('Todo updated')
+    } catch (error) {
+      console.error('Error updating todo:', error)
+      toast.error('Failed to update todo')
+    }
+  }
+
+  const handleAddNote = async (todoId: string) => {
+    if (!newNoteContent.trim()) return
+    
+    try {
+      await addNoteToTodo(todoId, newNoteContent.trim())
+      setNewNoteContent("")
+      setSelectedTodoForNote(null)
+      toast.success('Note added')
+    } catch (error) {
+      console.error('Error adding note:', error)
+      toast.error('Failed to add note')
+    }
+  }
+
+  const handleDeleteNote = async (noteId: string) => {
+    try {
+      await deleteNote(noteId)
+      toast.success('Note deleted')
+    } catch (error) {
+      console.error('Error deleting note:', error)
+      toast.error('Failed to delete note')
+    }
+  }
+
+  const handleAddTimer = async (todoId: string) => {
+    try {
+      await addTimerToTodo(todoId, 25)
+      toast.success('Timer added')
+    } catch (error) {
+      console.error('Error adding timer:', error)
+      toast.error('Failed to add timer')
+    }
+  }
+
+  const handleStartTimer = async (todoId: string) => {
+    try {
+      const todo = findTodoById(todoId)
+      if (!todo?.timer) return
+
+      const startTime = todo.timer.paused_time_remaining 
+        ? new Date(Date.now() - ((todo.timer.duration_minutes * 60) - todo.timer.paused_time_remaining) * 1000).toISOString()
+        : new Date().toISOString()
+
+      await updateTodoTimer(todoId, {
+        start_time: startTime,
+        paused_time_remaining: null,
+        is_running: true,
+        completed: false
+      })
+      
+      setActiveTimerId(todoId)
+      toast.success('Timer started')
+    } catch (error) {
+      console.error('Error starting timer:', error)
+      toast.error('Failed to start timer')
+    }
+  }
+
+  const handlePauseTimer = async (todoId: string) => {
+    try {
+      const remainingSeconds = activeTimers[todoId] || 0
+      
+      await updateTodoTimer(todoId, {
+        is_running: false,
+        paused_time_remaining: remainingSeconds
+      })
+      
+      if (activeTimerId === todoId) {
+        setActiveTimerId(null)
+      }
+      toast.success('Timer paused')
+    } catch (error) {
+      console.error('Error pausing timer:', error)
+      toast.error('Failed to pause timer')
+    }
+  }
+
+  const handleResetTimer = async (todoId: string) => {
+    try {
+      await updateTodoTimer(todoId, {
+        start_time: null,
+        paused_time_remaining: null,
+        is_running: false,
+        completed: false
+      })
+      
+      setActiveTimers(prev => {
+        const newTimers = {...prev}
+        delete newTimers[todoId]
+        return newTimers
+      })
+      
+      if (activeTimerId === todoId) {
+        setActiveTimerId(null)
+      }
+      toast.success('Timer reset')
+    } catch (error) {
+      console.error('Error resetting timer:', error)
+      toast.error('Failed to reset timer')
+    }
+  }
+
+  // Timer update effect
   useEffect(() => {
-    // Find all todos with active timers
-    const todosWithRunningTimers = todos.filter(todo => 
-      todo.timer?.isRunning && !todo.timer?.completed
+    const todosWithRunningTimers = getAllTodos().filter(todo => 
+      todo.timer?.is_running && !todo.timer?.completed
     )
     
-    // No running timers? Exit early
     if (todosWithRunningTimers.length === 0) {
       return
     }
     
-    // Set up interval to update timers every second
     const interval = setInterval(() => {
       const updates: {[key: string]: number} = {}
       let shouldUpdateTimers = false
       
-      // Update each running timer
       todosWithRunningTimers.forEach(todo => {
-        if (!todo.timer || !todo.timer.duration) return
+        if (!todo.timer || !todo.timer.duration_minutes) return
         
-        // Calculate remaining time
-        const startTime = todo.timer.startTime ? new Date(todo.timer.startTime).getTime() : Date.now()
-        const durationMs = todo.timer.duration * 60 * 1000
+        const startTime = todo.timer.start_time ? new Date(todo.timer.start_time).getTime() : Date.now()
+        const durationMs = todo.timer.duration_minutes * 60 * 1000
         const elapsedMs = Date.now() - startTime
         const remainingMs = durationMs - elapsedMs
         const remainingSeconds = Math.max(0, Math.ceil(remainingMs / 1000))
         
-        // Only update if the timer value changed
         if (activeTimers[todo.id] !== remainingSeconds) {
           updates[todo.id] = remainingSeconds
           shouldUpdateTimers = true
         }
         
         // Timer completed
-        if (remainingSeconds === 0 && todo.timer.isRunning) {
-          // Send notification if enabled
-          if (notificationsEnabled && !timerNotifications[todo.id]) {
-            try {
-              new Notification("Todo Timer Completed", { 
-                body: `Time's up for: ${todo.title}`,
-                icon: "/favicon.ico"
-              })
-              
-              // Mark this notification as sent
-              setTimerNotifications(prev => ({...prev, [todo.id]: true}))
-            } catch (error) {
-              console.error("Error sending notification:", error)
-            }
-          }
-          
-          // Update todo timer state using functional update
-          setTodos(currentTodos => currentTodos.map(t => {
-            if (t.id === todo.id && t.timer) {
-              return {
-                ...t,
-                timer: {
-                  ...t.timer,
-                  isRunning: false,
-                  completed: true
-                }
-              }
-            }
-            return t
-          }))
+        if (remainingSeconds === 0 && todo.timer.is_running) {
+          handleTimerComplete(todo.id, todo.title)
         }
       })
       
-      // Update active timers state if any changed
       if (shouldUpdateTimers) {
         setActiveTimers(prev => ({...prev, ...updates}))
       }
     }, 1000)
     
     return () => clearInterval(interval)
-  }, [todos, notificationsEnabled]) // Removed activeTimers from dependencies
+  }, [todos, activeTimers])
 
-  // Save todos to localStorage whenever they change
-  useEffect(() => {
-    saveTodosToLocalStorage(todos)
-  }, [todos])
+  const handleTimerComplete = async (todoId: string, todoTitle: string) => {
+    try {
+      await updateTodoTimer(todoId, {
+        is_running: false,
+        completed: true
+      })
+      
+      if (activeTimerId === todoId) {
+        setActiveTimerId(null)
+      }
+      
+      // Show notification
+      if ('Notification' in window && Notification.permission === 'granted') {
+        new Notification("Timer Completed", { 
+          body: `Time's up for: ${todoTitle}`,
+          icon: "/favicon.ico"
+        })
+      }
+      
+      toast.success(`Timer completed for: ${todoTitle}`)
+    } catch (error) {
+      console.error('Error completing timer:', error)
+    }
+  }
 
-  // Add new todo
-  const addTodo = (parentId?: string) => {
-    if (!newTodo.trim()) return
+  // Helper functions
+  const findTodoById = (id: string): TodoWithRelations | null => {
+    const search = (todoList: TodoWithRelations[]): TodoWithRelations | null => {
+      for (const todo of todoList) {
+        if (todo.id === id) return todo
+        if (todo.children) {
+          const found = search(todo.children)
+          if (found) return found
+        }
+      }
+      return null
+    }
+    return search(todos)
+  }
 
-    const todo: Todo = {
-      id: generateId(),
-      title: newTodo,
-      status: 'pending',
-      createdAt: new Date().toISOString(),
-      parentId,
-      notes: [],
-      isExpanded: true,
-      ...(newTodoHasTimer && {
-        timer: {
-          duration: newTodoTimerDuration,
-          isRunning: false,
-          completed: false
+  const getAllTodos = (): TodoWithRelations[] => {
+    const result: TodoWithRelations[] = []
+    const traverse = (todoList: TodoWithRelations[]) => {
+      todoList.forEach(todo => {
+        result.push(todo)
+        if (todo.children) {
+          traverse(todo.children)
         }
       })
     }
-
-    setTodos(prevTodos => [...prevTodos, todo])
-    setNewTodo("")
-    setNewTodoHasTimer(false)
-    setNewTodoTimerDuration(25)
-    setNewTodoDialogOpen(false)
-    setNewTodoParentId(undefined) // Clear parent ID after adding
+    traverse(todos)
+    return result
   }
 
-  // Toggle todo completion
-  const toggleTodo = (id: string) => {
-    setTodos(prevTodos => prevTodos.map((todo) => {
-      if (todo.id === id) {
-        // Also stop timer if completing a todo
-        const newTodo = { 
-          ...todo, 
-          completed: !todo.completed,
-        }
-        
-        // If completing a todo with a running timer, stop the timer
-        if (!todo.completed && todo.timer?.isRunning) {
-          newTodo.timer = {
-            ...todo.timer,
-            isRunning: false,
-            completed: true
-          }
-        }
-        
-        return newTodo
-      }
-      return todo
-    }))
-  }
-
-  // Delete todo
-  const deleteTodo = (id: string) => {
-    // Get all child todos to delete
-    const childIds = getAllChildIds(id, todos)
-    const idsToDelete = [id, ...childIds]
-    
-    setTodos(prevTodos => prevTodos.filter((todo) => !idsToDelete.includes(todo.id)))
-    
-    // Clean up active timers if needed
-    const newActiveTimers = {...activeTimers}
-    idsToDelete.forEach(id => {
-      delete newActiveTimers[id]
-    })
-    setActiveTimers(newActiveTimers)
-    
-    // Update active timer if needed
-    if (activeTimerId && idsToDelete.includes(activeTimerId)) {
-      setActiveTimerId(null)
+  const clearCompleted = async () => {
+    try {
+      const completedTodos = getAllTodos().filter(todo => todo.status === 'completed')
+      await Promise.all(completedTodos.map(todo => updateTodo(todo.id, { status: 'archived' })))
+      toast.success('Completed todos cleared')
+    } catch (error) {
+      console.error('Error clearing completed todos:', error)
+      toast.error('Failed to clear completed todos')
     }
-  }
-
-  // Get all child IDs recursively
-  const getAllChildIds = (parentId: string, todoList: Todo[]): string[] => {
-    const directChildren = todoList.filter(todo => todo.parentId === parentId)
-    const directChildIds = directChildren.map(child => child.id)
-    
-    const grandChildIds = directChildIds.flatMap(childId => 
-      getAllChildIds(childId, todoList)
-    )
-    
-    return [...directChildIds, ...grandChildIds]
-  }
-
-  // Clear completed todos
-  const clearCompleted = () => {
-    // Get IDs of all completed root todos
-    const completedRootIds = todos
-      .filter(todo => todo.completed && !todo.parentId)
-      .map(todo => todo.id)
-    
-    // Get all child IDs to remove as well
-    const allChildIds = completedRootIds.flatMap(id => getAllChildIds(id, todos))
-    const allIdsToRemove = [...completedRootIds, ...allChildIds]
-    
-    setTodos(prevTodos => prevTodos.filter(todo => !allIdsToRemove.includes(todo.id)))
-    
-    // Clean up active timers for removed todos
-    const newActiveTimers = {...activeTimers}
-    allIdsToRemove.forEach(id => {
-      delete newActiveTimers[id]
-    })
-    setActiveTimers(newActiveTimers)
-    
-    // Update active timer if needed
-    if (activeTimerId && allIdsToRemove.includes(activeTimerId)) {
-      setActiveTimerId(null)
-    }
-  }
-
-  // Toggle todo expansion (for nested todos)
-  const toggleExpand = (id: string) => {
-    setTodos(prevTodos => prevTodos.map(todo => 
-      todo.id === id ? { ...todo, isExpanded: !todo.isExpanded } : todo
-    ))
-  }
-
-  // Edit todo
-  const startEditTodo = (id: string, text: string) => {
-    setEditingTodoId(id)
-    setEditText(text)
-  }
-
-  const saveEditTodo = () => {
-    if (!editingTodoId || !editText.trim()) return
-    
-    setTodos(prevTodos => prevTodos.map(todo => 
-      todo.id === editingTodoId ? { ...todo, text: editText } : todo
-    ))
-    
-    setEditingTodoId(null)
-    setEditText("")
-  }
-
-  // Timer controls
-  const startTimer = (id: string) => {
-    setTodos(prevTodos => prevTodos.map(todo => {
-      if (todo.id === id && todo.timer) {
-        return {
-          ...todo,
-          timer: {
-            ...todo.timer,
-            startTime: todo.timer.pausedTimeRemaining 
-              ? new Date(Date.now() - ((todo.timer.duration * 60) - todo.timer.pausedTimeRemaining) * 1000).toISOString()
-              : new Date().toISOString(),
-            pausedTimeRemaining: undefined,
-            isRunning: true,
-            completed: false
-          }
-        }
-      }
-      return todo
-    }))
-    
-    // Reset notification state
-    setTimerNotifications(prev => ({...prev, [id]: false}))
-    
-    // Set this as the active timer
-    setActiveTimerId(id)
-  }
-
-  const pauseTimer = (id: string) => {
-    setTodos(prevTodos => prevTodos.map(todo => {
-      if (todo.id === id && todo.timer) {
-        // Calculate remaining time
-        const remainingSeconds = activeTimers[id] || 0
-        
-        return {
-          ...todo,
-          timer: {
-            ...todo.timer,
-            isRunning: false,
-            pausedTimeRemaining: remainingSeconds
-          }
-        }
-      }
-      return todo
-    }))
-    
-    // Clear active timer
-    if (activeTimerId === id) {
-      setActiveTimerId(null)
-    }
-  }
-
-  const resetTimer = (id: string) => {
-    setTodos(prevTodos => prevTodos.map(todo => {
-      if (todo.id === id && todo.timer) {
-        return {
-          ...todo,
-          timer: {
-            ...todo.timer,
-            startTime: undefined,
-            pausedTimeRemaining: undefined,
-            isRunning: false,
-            completed: false
-          }
-        }
-      }
-      return todo
-    }))
-    
-    // Clear this timer from active timers
-    setActiveTimers(prev => {
-      const newTimers = {...prev}
-      delete newTimers[id]
-      return newTimers
-    })
-    
-    // Reset notification state
-    setTimerNotifications(prev => ({...prev, [id]: false}))
-    
-    // Clear active timer if this was it
-    if (activeTimerId === id) {
-      setActiveTimerId(null)
-    }
-  }
-  
-  // Note management
-  const addNoteToTodo = (todoId: string) => {
-    if (!newNoteContent.trim()) return
-    
-    const newNote: TodoNote = {
-      id: generateId(),
-      content: newNoteContent,
-      createdAt: new Date().toISOString()
-    }
-    
-    setTodos(prevTodos => prevTodos.map(todo => {
-      if (todo.id === todoId) {
-        return {
-          ...todo,
-          notes: [...(todo.notes || []), newNote]
-        }
-      }
-      return todo
-    }))
-    
-    setNewNoteContent("")
-    setSelectedTodoForNote(null)
-  }
-  
-  const deleteNote = (todoId: string, noteId: string) => {
-    setTodos(prevTodos => prevTodos.map(todo => {
-      if (todo.id === todoId && todo.notes) {
-        return {
-          ...todo,
-          notes: todo.notes.filter(note => note.id !== noteId)
-        }
-      }
-      return todo
-    }))
-  }
-
-  // Handle opening the timer dialog
-  const handleOpenTimerDialog = () => {
-    if (newTodo.trim()) {
-      setNewTodoHasTimer(true)
-      setNewTodoDialogOpen(true)
-    }
-  }
-
-  // Add timer to existing todo
-  const addTimerToTodo = (todoId: string) => {
-    setTodos(prevTodos => prevTodos.map(t => {
-      if (t.id === todoId) {
-        return {
-          ...t, 
-          timer: { 
-            duration: 25, 
-            isRunning: false, 
-            completed: false 
-          }
-        }
-      }
-      return t
-    }))
   }
 
   // Filter logic
@@ -568,27 +391,21 @@ export default function TodoList() {
     return true
   })
 
-  // Get root level todos for display
-  const rootTodos = filteredTodos.filter(todo => !todo.parentId)
-  
   // Render a todo item with its children
-  const renderTodoItem = (todo: Todo, level = 0) => {
-    const hasChildren = todos.some(t => t.parentId === todo.id)
-    const childTodos = filteredTodos.filter(t => t.parentId === todo.id)
+  const renderTodoItem = (todo: TodoWithRelations, level = 0) => {
+    const hasChildren = todo.children && todo.children.length > 0
     const hasTimer = !!todo.timer
-    const timerRemaining = activeTimers[todo.id] || (todo.timer?.pausedTimeRemaining || (todo.timer?.duration || 0) * 60 || 0)
-    const timerProgress = hasTimer && todo.timer && todo.timer.duration
-      ? 100 - (timerRemaining / (todo.timer.duration * 60) * 100)
+    const timerRemaining = activeTimers[todo.id] || 
+      (todo.timer?.paused_time_remaining || 
+       (todo.timer?.duration_minutes || 0) * 60 || 0)
+    const timerProgress = hasTimer && todo.timer && todo.timer.duration_minutes
+      ? 100 - (timerRemaining / (todo.timer.duration_minutes * 60) * 100)
       : 0
       
-    // Count all notes
     const notesCount = todo.notes?.length || 0
-    
-    // Determine margin for nested level
     const marginClass = level === 0 ? "" : 
                         level === 1 ? "ml-6" : 
-                        level === 2 ? "ml-12" : 
-                        level === 3 ? "ml-18" : "ml-24"
+                        level === 2 ? "ml-12" : "ml-18"
     
     return (
       <motion.div 
@@ -602,7 +419,7 @@ export default function TodoList() {
         <Card
           className={cn(
             "overflow-hidden transition-all duration-200 hover:shadow-md",
-            todo.completed ? "bg-muted/30" : "",
+            todo.status === 'completed' ? "bg-muted/30" : "",
             isFocusMode && todo.id !== activeTimerId ? "opacity-40" : "",
             marginClass
           )}
@@ -619,19 +436,19 @@ export default function TodoList() {
                   <button 
                     onClick={(e) => {
                       e.stopPropagation()
-                      toggleExpand(todo.id)
+                      handleUpdateExpansion(todo.id, !todo.is_expanded)
                     }} 
                     className="text-muted-foreground hover:text-foreground transition-colors"
                   >
-                    {todo.isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                    {todo.is_expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
                   </button>
                 )}
                 
                 <Checkbox
                   id={todo.id}
-                  checked={todo.completed}
-                  onCheckedChange={() => toggleTodo(todo.id)}
-                  className={todo.completed ? "border-primary" : ""}
+                  checked={todo.status === 'completed'}
+                  onCheckedChange={() => handleToggleTodo(todo)}
+                  className={todo.status === 'completed' ? "border-primary" : ""}
                 />
                 
                 <div className="flex-grow min-w-0">
@@ -643,23 +460,25 @@ export default function TodoList() {
                         onKeyDown={(e) => {
                           if (e.key === "Enter") {
                             e.preventDefault()
-                            saveEditTodo()
+                            handleEditTodo(todo.id, editText)
                           }
                         }}
                         className="h-8 text-sm"
                         autoFocus
                       />
-                      <Button size="sm" onClick={saveEditTodo} className="h-8 px-2">Save</Button>
+                      <Button size="sm" onClick={() => handleEditTodo(todo.id, editText)} className="h-8 px-2">
+                        Save
+                      </Button>
                     </div>
                   ) : (
                     <label
                       htmlFor={todo.id}
                       className={cn(
-                        "block text-sm truncate",
-                        todo.completed ? "line-through text-muted-foreground" : ""
+                        "block text-sm truncate cursor-pointer",
+                        todo.status === 'completed' ? "line-through text-muted-foreground" : ""
                       )}
                     >
-                      {todo.text}
+                      {todo.title}
                     </label>
                   )}
                   
@@ -667,7 +486,7 @@ export default function TodoList() {
                   <div className="flex mt-1 space-x-1">
                     {hasTimer && (
                       <Badge 
-                        variant={todo.timer?.isRunning ? "default" : "outline"}
+                        variant={todo.timer?.is_running ? "default" : "outline"}
                         className="text-xs px-1.5 flex items-center gap-1"
                       >
                         <Clock className="h-3 w-3" />
@@ -678,7 +497,7 @@ export default function TodoList() {
                     {hasChildren && (
                       <Badge variant="secondary" className="text-xs px-1.5 flex items-center gap-1">
                         <Layers className="h-3 w-3" />
-                        {childTodos.length}
+                        {todo.children?.length}
                       </Badge>
                     )}
                     
@@ -701,7 +520,10 @@ export default function TodoList() {
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
-                    <DropdownMenuItem onClick={() => startEditTodo(todo.id, todo.text)}>
+                    <DropdownMenuItem onClick={() => {
+                      setEditingTodoId(todo.id)
+                      setEditText(todo.title)
+                    }}>
                       <Edit className="h-4 w-4 mr-2" />
                       Edit
                     </DropdownMenuItem>
@@ -720,7 +542,7 @@ export default function TodoList() {
                     </DropdownMenuItem>
                     
                     {!todo.timer && (
-                      <DropdownMenuItem onClick={() => addTimerToTodo(todo.id)}>
+                      <DropdownMenuItem onClick={() => handleAddTimer(todo.id)}>
                         <Timer className="h-4 w-4 mr-2" />
                         Add Timer
                       </DropdownMenuItem>
@@ -737,20 +559,20 @@ export default function TodoList() {
                           size="icon" 
                           className={cn(
                             "h-8 w-8",
-                            todo.timer?.isRunning ? "text-green-500" : "",
+                            todo.timer?.is_running ? "text-green-500" : "",
                             todo.timer?.completed ? "text-red-500" : ""
                           )}
                           onClick={() => {
-                            if (todo.timer?.isRunning) {
-                              pauseTimer(todo.id)
+                            if (todo.timer?.is_running) {
+                              handlePauseTimer(todo.id)
                             } else if (!todo.timer?.completed) {
-                              startTimer(todo.id)
+                              handleStartTimer(todo.id)
                             } else {
-                              resetTimer(todo.id)
+                              handleResetTimer(todo.id)
                             }
                           }}
                         >
-                          {todo.timer?.isRunning ? (
+                          {todo.timer?.is_running ? (
                             <div className="animate-pulse">
                               <Clock className="h-4 w-4" />
                             </div>
@@ -762,7 +584,7 @@ export default function TodoList() {
                         </Button>
                       </TooltipTrigger>
                       <TooltipContent>
-                        {todo.timer?.isRunning 
+                        {todo.timer?.is_running 
                           ? "Pause Timer" 
                           : todo.timer?.completed 
                             ? "Reset Timer" 
@@ -772,7 +594,7 @@ export default function TodoList() {
                   </TooltipProvider>
                 )}
                 
-                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => deleteTodo(todo.id)}>
+                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleDeleteTodo(todo.id)}>
                   <Trash2 className="h-4 w-4" />
                 </Button>
               </div>
@@ -788,12 +610,20 @@ export default function TodoList() {
         </Card>
         
         {/* Render children if expanded */}
-        {todo.isExpanded && hasChildren && (
+        {todo.is_expanded && hasChildren && (
           <div className="space-y-2">
-            {childTodos.map(childTodo => renderTodoItem(childTodo, level + 1))}
+            {todo.children!.map(childTodo => renderTodoItem(childTodo, level + 1))}
           </div>
         )}
       </motion.div>
+    )
+  }
+
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center py-20">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+      </div>
     )
   }
 
@@ -817,7 +647,7 @@ export default function TodoList() {
           </motion.div>
         </div>
         <div className="flex gap-2">
-          {todos.some((todo) => todo.completed) && (
+          {getAllTodos().some((todo) => todo.status === 'completed') && (
             <motion.div
               initial={{ opacity: 0, scale: 0.8 }}
               animate={{ opacity: 1, scale: 1 }}
@@ -856,7 +686,7 @@ export default function TodoList() {
         </div>
       </motion.div>
 
-      {/* Add Todo Input or Dialog Trigger */}
+      {/* Add Todo Input */}
       <motion.div
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
@@ -872,7 +702,7 @@ export default function TodoList() {
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault()
                 if (newTodo.trim()) {
-                  addTodo()
+                  handleCreateTodo()
                 }
               }
             }}
@@ -885,14 +715,19 @@ export default function TodoList() {
                 variant="outline" 
                 size="icon" 
                 className="shadow-sm"
-                onClick={handleOpenTimerDialog}
+                onClick={() => {
+                  if (newTodo.trim()) {
+                    setNewTodoHasTimer(true)
+                    setNewTodoDialogOpen(true)
+                  }
+                }}
               >
                 <Clock className="h-4 w-4" />
               </Button>
             </DialogTrigger>
             
             <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-              <Button onClick={() => addTodo()} className="shadow-md">
+              <Button onClick={handleCreateTodo} className="shadow-md">
                 <Plus className="h-4 w-4 mr-2" />
                 Add
               </Button>
@@ -951,7 +786,7 @@ export default function TodoList() {
               <Button variant="outline" onClick={() => setNewTodoDialogOpen(false)}>
                 Cancel
               </Button>
-              <Button onClick={() => addTodo(newTodoParentId)}>
+              <Button onClick={handleCreateTodo}>
                 Create {newTodoParentId ? "Subtask" : "Todo"}
               </Button>
             </DialogFooter>
@@ -969,7 +804,7 @@ export default function TodoList() {
         <DrawerContent className="max-h-[80vh]">
           <DrawerHeader>
             <DrawerTitle>
-              Notes for: {todos.find(t => t.id === selectedTodoForNote)?.text}
+              Notes for: {findTodoById(selectedTodoForNote || '')?.title}
             </DrawerTitle>
           </DrawerHeader>
           
@@ -983,13 +818,13 @@ export default function TodoList() {
                     onChange={(e) => setNewNoteContent(e.target.value)}
                     className="min-h-[100px]"
                   />
-                  <Button onClick={() => addNoteToTodo(selectedTodoForNote)}>
+                  <Button onClick={() => handleAddNote(selectedTodoForNote)}>
                     Add Note
                   </Button>
                 </div>
                 
                 <div className="space-y-2 max-h-[40vh] overflow-y-auto">
-                  {todos.find(t => t.id === selectedTodoForNote)?.notes?.map(note => (
+                  {findTodoById(selectedTodoForNote)?.notes?.map(note => (
                     <Card key={note.id} className="p-2">
                       <div className="flex justify-between">
                         <p className="text-sm whitespace-pre-wrap">{note.content}</p>
@@ -997,18 +832,18 @@ export default function TodoList() {
                           variant="ghost" 
                           size="icon" 
                           className="h-6 w-6" 
-                          onClick={() => deleteNote(selectedTodoForNote, note.id)}
+                          onClick={() => handleDeleteNote(note.id)}
                         >
                           <X className="h-3 w-3" />
                         </Button>
                       </div>
                       <p className="text-xs text-muted-foreground mt-1">
-                        {new Date(note.createdAt).toLocaleString()}
+                        {new Date(note.created_at).toLocaleString()}
                       </p>
                     </Card>
                   ))}
                   
-                  {(todos.find(t => t.id === selectedTodoForNote)?.notes?.length || 0) === 0 && (
+                  {(findTodoById(selectedTodoForNote)?.notes?.length || 0) === 0 && (
                     <div className="text-center py-8 text-muted-foreground">
                       <AlignLeft className="h-8 w-8 mx-auto mb-2 opacity-50" />
                       <p>No notes yet. Add your first note!</p>
@@ -1048,36 +883,36 @@ export default function TodoList() {
           </TabsList>
           
           <TabsContent value="all">
-            {rootTodos.length === 0 ? (
+            {filteredTodos.length === 0 ? (
               <EmptyState tab="all" onAddClick={() => document.querySelector("input")?.focus()} />
             ) : (
               <div className="space-y-2">
                 <AnimatePresence>
-                  {rootTodos.map(todo => renderTodoItem(todo))}
+                  {filteredTodos.map(todo => renderTodoItem(todo))}
                 </AnimatePresence>
               </div>
             )}
           </TabsContent>
           
           <TabsContent value="active">
-            {rootTodos.filter(todo => !todo.completed).length === 0 ? (
+            {filteredTodos.filter(todo => todo.status === 'pending').length === 0 ? (
               <EmptyState tab="active" onAddClick={() => document.querySelector("input")?.focus()} />
             ) : (
               <div className="space-y-2">
                 <AnimatePresence>
-                  {rootTodos.map(todo => renderTodoItem(todo))}
+                  {filteredTodos.map(todo => renderTodoItem(todo))}
                 </AnimatePresence>
               </div>
             )}
           </TabsContent>
           
           <TabsContent value="completed">
-            {rootTodos.filter(todo => todo.completed).length === 0 ? (
+            {filteredTodos.filter(todo => todo.status === 'completed').length === 0 ? (
               <EmptyState tab="completed" />
             ) : (
               <div className="space-y-2">
                 <AnimatePresence>
-                  {rootTodos.map(todo => renderTodoItem(todo))}
+                  {filteredTodos.map(todo => renderTodoItem(todo))}
                 </AnimatePresence>
               </div>
             )}
@@ -1099,13 +934,13 @@ export default function TodoList() {
                   {formatTime(activeTimers[activeTimerId] || 0)}
                 </div>
                 <div className="text-sm text-muted-foreground mt-1">
-                  {todos.find(t => t.id === activeTimerId)?.text}
+                  {findTodoById(activeTimerId)?.title}
                 </div>
                 <div className="flex gap-2 mt-2">
-                  <Button size="sm" variant="outline" onClick={() => pauseTimer(activeTimerId)}>
+                  <Button size="sm" variant="outline" onClick={() => handlePauseTimer(activeTimerId)}>
                     Pause
                   </Button>
-                  <Button size="sm" variant="destructive" onClick={() => resetTimer(activeTimerId)}>
+                  <Button size="sm" variant="destructive" onClick={() => handleResetTimer(activeTimerId)}>
                     Reset
                   </Button>
                 </div>
