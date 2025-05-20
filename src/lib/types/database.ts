@@ -132,6 +132,9 @@ export type Database = {
           description: string | null
           frequency: string
           streak_count: number
+          habit_type: 'builder' | 'quitter' | null
+          frequency_days: string[] | null
+          is_active: boolean
           created_at: string
           updated_at: string
         }
@@ -142,6 +145,9 @@ export type Database = {
           description?: string | null
           frequency: string
           streak_count?: number
+          habit_type?: 'builder' | 'quitter' | null
+          frequency_days?: string[] | null
+          is_active?: boolean
           created_at?: string
           updated_at?: string
         }
@@ -152,8 +158,28 @@ export type Database = {
           description?: string | null
           frequency?: string
           streak_count?: number
+          habit_type?: 'builder' | 'quitter' | null
+          frequency_days?: string[] | null
+          is_active?: boolean
           created_at?: string
           updated_at?: string
+        }
+      }
+      habit_completions: {
+        Row: {
+          id: string
+          habit_id: string
+          completed_at: string
+        }
+        Insert: {
+          id?: string
+          habit_id: string
+          completed_at?: string
+        }
+        Update: {
+          id?: string
+          habit_id?: string
+          completed_at?: string
         }
       }
       reminders: {
