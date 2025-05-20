@@ -26,6 +26,8 @@ import {
   ActivityIcon,
   CalendarCheck
 } from "lucide-react"
+import { createClient } from '@/lib/utils/supabase/client'
+import { useRouter } from 'next/navigation'
 
 export default function Home() {
   const [mounted, setMounted] = useState(false)
@@ -34,6 +36,8 @@ export default function Home() {
   const [isMobile, setIsMobile] = useState(true)
   const [isLoading, setIsLoading] = useState(true)
   const [contentLoading, setContentLoading] = useState(false)
+  const router = useRouter()
+  const supabase = createClient()
 
   // Prevent hydration errors with localStorage and handle responsive layout
   useEffect(() => {
@@ -56,17 +60,23 @@ export default function Home() {
     // Add listener for window resize
     window.addEventListener('resize', checkIfMobile)
     
-    // Simulate initial page loading
-    const timer = setTimeout(() => {
+    // Check authentication state
+    const checkAuth = async () => {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) {
+        router.push('/login')
+        return
+      }
       setIsLoading(false)
-    }, 1500)
+    }
+    
+    checkAuth()
     
     // Cleanup
     return () => {
       window.removeEventListener('resize', checkIfMobile)
-      clearTimeout(timer)
     }
-  }, [])
+  }, [router, supabase])
 
   const toggleTheme = () => {
     setTheme(theme === "light" ? "dark" : "light")
