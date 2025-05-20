@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 "use client"
 
-import { useState, useEffect} from "react"
+import { useState, useEffect } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { 
   Plus, Trash2, ListTodo, CheckCircle2, CircleSlash, Sparkles, 
@@ -24,6 +24,9 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Progress } from "@/components/ui/progress"
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerFooter } from "@/components/ui/drawer"
 import { cn } from "@/lib/utils"
+import { useAuth } from '@/hooks/useAuth'
+import { getTodos, createTodo, updateTodo, subscribeToChanges } from '@/lib/utils/database'
+import { Database } from '@/lib/types/database'
 
 // Define types
 type TodoNote = {
@@ -40,16 +43,7 @@ type TodoTimer = {
   completed: boolean
 }
 
-type Todo = {
-  id: string
-  text: string
-  completed: boolean
-  createdAt: string
-  parentId?: string
-  notes: TodoNote[]
-  timer?: TodoTimer
-  isExpanded?: boolean
-}
+type Todo = Database['public']['Tables']['todos']['Row']
 
 // Helper functions
 const generateId = (): string => {
@@ -113,30 +107,10 @@ const formatTime = (timeInSeconds: number): string => {
 }
 
 export default function TodoList() {
-  // States
-  const [todos, setTodos] = useState<Todo[]>(() => {
-    // Lazy initialization from localStorage
-    if (typeof window !== 'undefined') {
-      const storedTodos = localStorage.getItem('todos')
-      if (storedTodos) {
-        try {
-          const parsed = JSON.parse(storedTodos)
-          // Ensure all todos have required properties
-          const migratedTodos = Array.isArray(parsed) ? parsed.map((todo: any) => ({
-            ...todo,
-            notes: todo.notes || [],
-            isExpanded: todo.isExpanded ?? true
-          })) : []
-          return migratedTodos
-        } catch (error) {
-          console.error('Error parsing initial todos:', error)
-        }
-      }
-    }
-    return []
-  })
-  
-  const [newTodo, setNewTodo] = useState("")
+  const { user } = useAuth()
+  const [todos, setTodos] = useState<Todo[]>([])
+  const [newTodo, setNewTodo] = useState('')
+  const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState<"all" | "active" | "completed">("all")
   const [isFocusMode, setIsFocusMode] = useState(false)
   const [editingTodoId, setEditingTodoId] = useState<string | null>(null)
@@ -152,28 +126,74 @@ export default function TodoList() {
   const [newTodoHasTimer, setNewTodoHasTimer] = useState(false)
   const [activeTimerId, setActiveTimerId] = useState<string | null>(null)
   
-  // Request notification permission on component mount
   useEffect(() => {
-    const loadedTodos = getTodosFromLocalStorage()
-    if (loadedTodos.length > 0) {
-      setTodos(loadedTodos)
-    }
-    
-    // Request notification permission when component mounts
-    requestNotificationPermission().then(granted => {
-      setNotificationsEnabled(granted)
-    })
-  }, [])
-  useEffect(() => {
-    requestNotificationPermission().then(granted => {
-      setNotificationsEnabled(granted)
-    })
-  }, [])
+    if (!user) return
 
-  // Save todos to localStorage whenever they change
-  useEffect(() => {
-    saveTodosToLocalStorage(todos)
-  }, [todos])
+    // Fetch initial todos
+    fetchTodos()
+
+    // Subscribe to real-time updates
+    const subscription = subscribeToChanges('todos', (payload) => {
+      if (payload.event === 'INSERT') {
+        setTodos((prev) => [payload.new as Todo, ...prev])
+      } else if (payload.event === 'UPDATE') {
+        setTodos((prev) =>
+          prev.map((todo) => (todo.id === payload.new?.id ? (payload.new as Todo) : todo))
+        )
+      } else if (payload.event === 'DELETE') {
+        setTodos((prev) => prev.filter((todo) => todo.id !== payload.old?.id))
+      }
+    })
+
+    return () => {
+      subscription.unsubscribe()
+    }
+  }, [user])
+
+  const fetchTodos = async () => {
+    if (!user) return
+    try {
+      const data = await getTodos(user.id)
+      setTodos(data)
+    } catch (error) {
+      console.error('Error fetching todos:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleCreateTodo = async () => {
+    if (!user || !newTodo.trim()) return
+
+    try {
+      await createTodo({
+        user_id: user.id,
+        title: newTodo.trim(),
+        status: 'pending',
+      })
+      setNewTodo('')
+    } catch (error) {
+      console.error('Error creating todo:', error)
+    }
+  }
+
+  const handleToggleTodo = async (todo: Todo) => {
+    try {
+      await updateTodo(todo.id, {
+        status: todo.status === 'completed' ? 'pending' : 'completed',
+      })
+    } catch (error) {
+      console.error('Error updating todo:', error)
+    }
+  }
+
+  const handleDeleteTodo = async (todoId: string) => {
+    try {
+      await updateTodo(todoId, { status: 'archived' })
+    } catch (error) {
+      console.error('Error deleting todo:', error)
+    }
+  }
 
   // Timer update effect with improved dependency management
   useEffect(() => {
@@ -215,7 +235,7 @@ export default function TodoList() {
           if (notificationsEnabled && !timerNotifications[todo.id]) {
             try {
               new Notification("Todo Timer Completed", { 
-                body: `Time's up for: ${todo.text}`,
+                body: `Time's up for: ${todo.title}`,
                 icon: "/favicon.ico"
               })
               
@@ -252,14 +272,19 @@ export default function TodoList() {
     return () => clearInterval(interval)
   }, [todos, notificationsEnabled]) // Removed activeTimers from dependencies
 
+  // Save todos to localStorage whenever they change
+  useEffect(() => {
+    saveTodosToLocalStorage(todos)
+  }, [todos])
+
   // Add new todo
   const addTodo = (parentId?: string) => {
     if (!newTodo.trim()) return
 
     const todo: Todo = {
       id: generateId(),
-      text: newTodo,
-      completed: false,
+      title: newTodo,
+      status: 'pending',
       createdAt: new Date().toISOString(),
       parentId,
       notes: [],
@@ -536,9 +561,11 @@ export default function TodoList() {
 
   // Filter logic
   const filteredTodos = todos.filter((todo) => {
-    if (activeTab === "all") return true
-    if (activeTab === "active") return !todo.completed
-    return todo.completed // if activeTab is "completed"
+    if (todo.status === 'archived') return false
+    if (activeTab === 'all') return true
+    if (activeTab === 'active') return todo.status === 'pending'
+    if (activeTab === 'completed') return todo.status === 'completed'
+    return true
   })
 
   // Get root level todos for display
@@ -1005,7 +1032,7 @@ export default function TodoList() {
 
       {/* Tabs & Todo List */}
       <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
-        <Tabs defaultValue="all" value={activeTab} onValueChange={(value) => setActiveTab(value as any)}>
+        <Tabs defaultValue="all" value={activeTab} onValueChange={(value) => setActiveTab(value as typeof activeTab)}>
           <TabsList className="mb-4 bg-muted/50 p-1 rounded-xl">
             <TabsTrigger value="all" className="rounded-lg data-[state=active]:shadow-md">
               All

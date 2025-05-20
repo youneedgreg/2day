@@ -11,6 +11,9 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { useAuth } from '@/hooks/useAuth'
+import { getHabits, createHabit, completeHabit, subscribeToChanges } from '@/lib/utils/database'
+import { Database } from '@/lib/types/database'
 
 // Define types directly in this file
 type HabitType = "builder" | "quitter"
@@ -20,14 +23,8 @@ type HistoryEntry = {
   completed: boolean
 }
 
-type Habit = {
-  id: string
-  name: string
-  type: HabitType
-  frequency: string[]
-  streak: number
-  history: HistoryEntry[]
-  createdAt: string
+type Habit = Database['public']['Tables']['habits']['Row'] & {
+  habit_completions: Database['public']['Tables']['habit_completions']['Row'][]
 }
 
 // Helper functions
@@ -87,50 +84,74 @@ const saveHabitsToLocalStorage = (habits: Habit[]): void => {
 const DAYS_OF_WEEK = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 
 export default function HabitTracker() {
-  // Use lazy initialization for habits state
-  const [habits, setHabits] = useState<Habit[]>(() => {
-    // This function only runs once during initial render
-    if (typeof window !== 'undefined') {
-      const storedHabits = localStorage.getItem('habits')
-      if (storedHabits) {
-        try {
-          const parsed = JSON.parse(storedHabits)
-          console.log('Initially loaded habits:', parsed)
-          return Array.isArray(parsed) ? parsed : []
-        } catch (error) {
-          console.error('Error parsing initial habits:', error)
-        }
-      }
-    }
-    return []
-  })
-  
+  const { user } = useAuth()
+  const [habits, setHabits] = useState<Habit[]>([])
   const [newHabit, setNewHabit] = useState("")
   const [habitType, setHabitType] = useState<HabitType>("builder")
   const [frequency, setFrequency] = useState<string[]>(["Mon", "Tue", "Wed", "Thu", "Fri"])
   const [dialogOpen, setDialogOpen] = useState(false)
   const [activeTab, setActiveTab] = useState<"all" | "builder" | "quitter">("all")
+  const [loading, setLoading] = useState(true)
 
-  // Backup loading from localStorage on component mount
   useEffect(() => {
-    console.log('Component mounted, loading habits from localStorage')
-    const loadedHabits = getHabitsFromLocalStorage()
-    console.log('Loaded habits:', loadedHabits)
-    
-    // Only set habits if we actually found some
-    if (loadedHabits.length > 0) {
-      setHabits(loadedHabits)
+    if (!user) return
+
+    // Fetch initial habits
+    fetchHabits()
+
+    // Subscribe to real-time updates
+    const subscription = subscribeToChanges('habits', (payload) => {
+      if (payload.event === 'INSERT') {
+        setHabits((prev) => [payload.new as Habit, ...prev])
+      } else if (payload.event === 'UPDATE') {
+        setHabits((prev) =>
+          prev.map((habit) => (habit.id === payload.new?.id ? (payload.new as Habit) : habit))
+        )
+      } else if (payload.event === 'DELETE') {
+        setHabits((prev) => prev.filter((habit) => habit.id !== payload.old?.id))
+      }
+    })
+
+    return () => {
+      subscription.unsubscribe()
     }
-    
-    // Manually check localStorage content
-    debugLocalStorage()
-  }, [])
+  }, [user])
 
-  // Save habits to localStorage whenever they change
-  useEffect(() => {
-    console.log('Saving habits to localStorage:', habits)
-    saveHabitsToLocalStorage(habits)
-  }, [habits])
+  const fetchHabits = async () => {
+    if (!user) return
+    try {
+      const data = await getHabits(user.id)
+      setHabits(data)
+    } catch (error) {
+      console.error('Error fetching habits:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleCreateHabit = async () => {
+    if (!user || !newHabit.trim()) return
+
+    try {
+      await createHabit({
+        user_id: user.id,
+        title: newHabit.trim(),
+        frequency: 'daily',
+        streak_count: 0,
+      })
+      setNewHabit('')
+    } catch (error) {
+      console.error('Error creating habit:', error)
+    }
+  }
+
+  const handleCompleteHabit = async (habitId: string) => {
+    try {
+      await completeHabit(habitId)
+    } catch (error) {
+      console.error('Error completing habit:', error)
+    }
+  }
 
   const addHabit = () => {
     if (!newHabit.trim()) return
@@ -142,8 +163,8 @@ export default function HabitTracker() {
       name: newHabit,
       type: habitType,
       frequency,
-      streak: 0,
-      history: [{ date: today, completed: false }],
+      streak_count: 0,
+      habit_completions: [{ completed_at: today }],
       createdAt: new Date().toISOString(),
     }
 
@@ -174,19 +195,19 @@ export default function HabitTracker() {
         if (habit.id !== habitId) return habit
 
         // Check if we already have an entry for today
-        const todayEntry = habit.history.find((entry) => entry.date === today)
+        const todayEntry = habit.habit_completions.find((entry) => entry.completed_at.split('T')[0] === today)
 
-        let newHistory
-        let newStreak = habit.streak
+        let newHabitCompletions
+        let newStreak = habit.streak_count
 
         if (todayEntry) {
           // Toggle the existing entry
-          newHistory = habit.history.map((entry) =>
-            entry.date === today ? { ...entry, completed: !entry.completed } : entry,
+          newHabitCompletions = habit.habit_completions.map((entry) =>
+            entry.completed_at.split('T')[0] === today ? { ...entry, completed_at: today } : entry,
           )
 
           // Update streak
-          if (!todayEntry.completed) {
+          if (!todayEntry.completed_at.split('T')[0] === today) {
             // If we're marking it complete
             newStreak += 1
           } else {
@@ -195,14 +216,14 @@ export default function HabitTracker() {
           }
         } else {
           // Add a new entry for today
-          newHistory = [...habit.history, { date: today, completed: true }]
+          newHabitCompletions = [...habit.habit_completions, { completed_at: today }]
           newStreak += 1
         }
 
         return {
           ...habit,
-          history: newHistory,
-          streak: newStreak,
+          habit_completions: newHabitCompletions,
+          streak_count: newStreak,
         }
       }),
     )
@@ -232,13 +253,18 @@ export default function HabitTracker() {
 
   const isHabitCompletedToday = (habit: Habit) => {
     const today = getTodayFormatted()
-    const todayEntry = habit.history.find((entry) => entry.date === today)
-    return todayEntry?.completed || false
+    return habit.habit_completions.some(
+      (completion) => completion.completed_at.split('T')[0] === today
+    )
   }
 
   const buttonVariants = {
     hover: { scale: 1.05 },
     tap: { scale: 0.95 },
+  }
+
+  if (loading) {
+    return <div>Loading habits...</div>
   }
 
   return (
@@ -410,10 +436,10 @@ export default function HabitTracker() {
                         <ArrowDown className="h-4 w-4 text-red-500" />
                       )}
                       {habit.name}
-                      {habit.streak > 0 && (
+                      {habit.streak_count > 0 && (
                         <Badge variant="outline" className="flex items-center gap-1 ml-2">
                           <Flame className="h-3 w-3 text-orange-500" />
-                          {habit.streak}
+                          {habit.streak_count}
                         </Badge>
                       )}
                     </CardTitle>
@@ -447,14 +473,14 @@ export default function HabitTracker() {
                     const date = new Date()
                     date.setDate(date.getDate() - 6 + i)
                     const dateStr = date.toISOString().split("T")[0]
-                    const entry = habit.history.find((h) => h.date === dateStr)
+                    const entry = habit.habit_completions.find((h) => h.completed_at.split('T')[0] === dateStr)
 
                     return (
                       <div
                         key={i}
                         className={`
                           flex-1 h-2 rounded-full
-                          ${entry?.completed ? "bg-green-500 dark:bg-green-700" : "bg-muted"}
+                          ${entry?.completed_at ? "bg-green-500 dark:bg-green-700" : "bg-muted"}
                         `}
                         title={dateStr}
                       />
