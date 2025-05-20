@@ -191,6 +191,11 @@ export type Database = {
           reminder_time: string
           repeat_frequency: string | null
           status: 'pending' | 'completed' | 'dismissed'
+          priority: 'low' | 'medium' | 'high' | null
+          space_id: string | null
+          completed_at: string | null
+          is_recurring: boolean
+          reminder_metadata: any | null
           created_at: string
           updated_at: string
         }
@@ -202,6 +207,11 @@ export type Database = {
           reminder_time: string
           repeat_frequency?: string | null
           status?: 'pending' | 'completed' | 'dismissed'
+          priority?: 'low' | 'medium' | 'high' | null
+          space_id?: string | null
+          completed_at?: string | null
+          is_recurring?: boolean
+          reminder_metadata?: any | null
           created_at?: string
           updated_at?: string
         }
@@ -213,6 +223,43 @@ export type Database = {
           reminder_time?: string
           repeat_frequency?: string | null
           status?: 'pending' | 'completed' | 'dismissed'
+          priority?: 'low' | 'medium' | 'high' | null
+          space_id?: string | null
+          completed_at?: string | null
+          is_recurring?: boolean
+          reminder_metadata?: any | null
+          created_at?: string
+          updated_at?: string
+        }
+      }
+      reminder_spaces: {
+        Row: {
+          id: string
+          user_id: string
+          name: string
+          icon: string
+          color: string
+          description: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          name: string
+          icon: string
+          color: string
+          description?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          name?: string
+          icon?: string
+          color?: string
+          description?: string | null
           created_at?: string
           updated_at?: string
         }
