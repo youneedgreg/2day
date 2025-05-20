@@ -1,59 +1,135 @@
-import { useEffect, useState } from 'react'
-import { supabase } from '@/lib/utils/database'
-import { Database } from '@/lib/types/database'
+// hooks/useAuth.ts
+import { useState, useEffect } from 'react'
+import { createClient } from '@/lib/utils/supabase/client'
+import type { User, Session } from '@supabase/supabase-js'
 
-type Profile = Database['public']['Tables']['profiles']['Row']
+export interface AuthState {
+  user: User | null
+  session: Session | null
+  loading: boolean
+  error: string | null
+}
 
 export function useAuth() {
-  const [user, setUser] = useState<Profile | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [state, setState] = useState<AuthState>({
+    user: null,
+    session: null,
+    loading: true,
+    error: null
+  })
+
+  const supabase = createClient()
 
   useEffect(() => {
+    let mounted = true
+
     // Get initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session?.user) {
-        fetchProfile(session.user.id)
-      } else {
-        setLoading(false)
+    const getInitialSession = async () => {
+      try {
+        const { data: { session }, error } = await supabase.auth.getSession()
+        
+        if (error) {
+          if (mounted) {
+            setState(prev => ({ ...prev, error: error.message, loading: false }))
+          }
+          return
+        }
+
+        if (mounted) {
+          setState({
+            user: session?.user ?? null,
+            session,
+            loading: false,
+            error: null
+          })
+        }
+      } catch (error) {
+        if (mounted) {
+          setState(prev => ({ 
+            ...prev, 
+            error: error instanceof Error ? error.message : 'Unknown error',
+            loading: false 
+          }))
+        }
       }
-    })
+    }
+
+    getInitialSession()
 
     // Listen for auth changes
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session?.user) {
-        fetchProfile(session.user.id)
-      } else {
-        setUser(null)
-        setLoading(false)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        if (mounted) {
+          setState({
+            user: session?.user ?? null,
+            session,
+            loading: false,
+            error: null
+          })
+        }
       }
-    })
+    )
 
     return () => {
+      mounted = false
       subscription.unsubscribe()
     }
-  }, [])
+  }, [supabase.auth])
 
-  const fetchProfile = async (userId: string) => {
+  const signOut = async () => {
     try {
-      const { data: profile, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', userId)
-        .single()
-
+      setState(prev => ({ ...prev, loading: true, error: null }))
+      const { error } = await supabase.auth.signOut()
       if (error) throw error
-      setUser(profile)
     } catch (error) {
-      console.error('Error fetching profile:', error)
-    } finally {
-      setLoading(false)
+      setState(prev => ({ 
+        ...prev, 
+        error: error instanceof Error ? error.message : 'Sign out failed',
+        loading: false 
+      }))
+    }
+  }
+
+  const signIn = async (email: string, password: string) => {
+    try {
+      setState(prev => ({ ...prev, loading: true, error: null }))
+      const { error } = await supabase.auth.signInWithPassword({
+        email,
+        password
+      })
+      if (error) throw error
+    } catch (error) {
+      setState(prev => ({ 
+        ...prev, 
+        error: error instanceof Error ? error.message : 'Sign in failed',
+        loading: false 
+      }))
+      throw error
+    }
+  }
+
+  const signUp = async (email: string, password: string) => {
+    try {
+      setState(prev => ({ ...prev, loading: true, error: null }))
+      const { error } = await supabase.auth.signUp({
+        email,
+        password
+      })
+      if (error) throw error
+    } catch (error) {
+      setState(prev => ({ 
+        ...prev, 
+        error: error instanceof Error ? error.message : 'Sign up failed',
+        loading: false 
+      }))
+      throw error
     }
   }
 
   return {
-    user,
-    loading,
+    ...state,
+    signOut,
+    signIn,
+    signUp
   }
-} 
+}

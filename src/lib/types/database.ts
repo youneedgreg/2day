@@ -1,12 +1,5 @@
-export type Json =
-  | string
-  | number
-  | boolean
-  | null
-  | { [key: string]: Json | undefined }
-  | Json[]
-
-export interface Database {
+// lib/types/database.ts
+export type Database = {
   public: {
     Tables: {
       profiles: {
@@ -31,6 +24,102 @@ export interface Database {
           username?: string | null
           full_name?: string | null
           avatar_url?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+      }
+      todos: {
+        Row: {
+          id: string
+          user_id: string
+          title: string
+          description: string | null
+          due_date: string | null
+          priority: 'low' | 'medium' | 'high' | null
+          status: 'pending' | 'completed' | 'archived'
+          parent_id: string | null
+          is_expanded: boolean
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          title: string
+          description?: string | null
+          due_date?: string | null
+          priority?: 'low' | 'medium' | 'high' | null
+          status?: 'pending' | 'completed' | 'archived'
+          parent_id?: string | null
+          is_expanded?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          title?: string
+          description?: string | null
+          due_date?: string | null
+          priority?: 'low' | 'medium' | 'high' | null
+          status?: 'pending' | 'completed' | 'archived'
+          parent_id?: string | null
+          is_expanded?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+      }
+      todo_notes: {
+        Row: {
+          id: string
+          todo_id: string
+          content: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          todo_id: string
+          content: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          todo_id?: string
+          content?: string
+          created_at?: string
+        }
+      }
+      todo_timers: {
+        Row: {
+          id: string
+          todo_id: string
+          duration_minutes: number
+          start_time: string | null
+          paused_time_remaining: number | null
+          is_running: boolean
+          completed: boolean
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          todo_id: string
+          duration_minutes?: number
+          start_time?: string | null
+          paused_time_remaining?: number | null
+          is_running?: boolean
+          completed?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          todo_id?: string
+          duration_minutes?: number
+          start_time?: string | null
+          paused_time_remaining?: number | null
+          is_running?: boolean
+          completed?: boolean
           created_at?: string
           updated_at?: string
         }
@@ -63,58 +152,6 @@ export interface Database {
           description?: string | null
           frequency?: string
           streak_count?: number
-          created_at?: string
-          updated_at?: string
-        }
-      }
-      habit_completions: {
-        Row: {
-          id: string
-          habit_id: string
-          completed_at: string
-        }
-        Insert: {
-          id?: string
-          habit_id: string
-          completed_at?: string
-        }
-        Update: {
-          id?: string
-          habit_id?: string
-          completed_at?: string
-        }
-      }
-      todos: {
-        Row: {
-          id: string
-          user_id: string
-          title: string
-          description: string | null
-          due_date: string | null
-          priority: 'low' | 'medium' | 'high' | null
-          status: 'pending' | 'completed' | 'archived'
-          created_at: string
-          updated_at: string
-        }
-        Insert: {
-          id?: string
-          user_id: string
-          title: string
-          description?: string | null
-          due_date?: string | null
-          priority?: 'low' | 'medium' | 'high' | null
-          status?: 'pending' | 'completed' | 'archived'
-          created_at?: string
-          updated_at?: string
-        }
-        Update: {
-          id?: string
-          user_id?: string
-          title?: string
-          description?: string | null
-          due_date?: string | null
-          priority?: 'low' | 'medium' | 'high' | null
-          status?: 'pending' | 'completed' | 'archived'
           created_at?: string
           updated_at?: string
         }
@@ -263,5 +300,8 @@ export interface Database {
     Enums: {
       [_ in never]: never
     }
+    CompositeTypes: {
+      [_ in never]: never
+    }
   }
-} 
+}
