@@ -1,98 +1,108 @@
-import { type NextRequest, NextResponse } from 'next/server'
+// middleware.ts (place in your root directory)
 import { createServerClient } from '@supabase/ssr'
-import { CookieOptions } from '@supabase/ssr'
+import { NextResponse, type NextRequest } from 'next/server'
 
 export async function middleware(request: NextRequest) {
-  try {
-    const response = NextResponse.next({
-      request: {
-        headers: request.headers,
-      },
-    })
+  let response = NextResponse.next({
+    request: {
+      headers: request.headers,
+    },
+  })
 
-    const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          get(name: string) {
-            return request.cookies.get(name)?.value
-          },
-          set(name: string, value: string, options: CookieOptions) {
-            // Enhanced cookie security options
-            const secureOptions = {
-              ...options,
-              secure: process.env.NODE_ENV === 'production',
-              sameSite: 'lax' as const,
-              path: '/',
-            }
-            response.cookies.set({
-              name,
-              value,
-              ...secureOptions,
-            })
-          },
-          remove(name: string, options: CookieOptions) {
-            response.cookies.set({
-              name,
-              value: '',
-              ...options,
-              path: '/',
-            })
-          },
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        get(name: string) {
+          return request.cookies.get(name)?.value
         },
-      }
-    )
-
-    // Refresh session if it exists
-    const { data: { session }, error } = await supabase.auth.getSession()
-    
-    if (error) {
-      console.error('Auth error:', error.message)
-      return NextResponse.redirect(new URL('/login', request.url))
+        set(name: string, value: string, options: any) {
+          request.cookies.set({
+            name,
+            value,
+            ...options,
+          })
+          response = NextResponse.next({
+            request: {
+              headers: request.headers,
+            },
+          })
+          response.cookies.set({
+            name,
+            value,
+            ...options,
+          })
+        },
+        remove(name: string, options: any) {
+          request.cookies.set({
+            name,
+            value: '',
+            ...options,
+          })
+          response = NextResponse.next({
+            request: {
+              headers: request.headers,
+            },
+          })
+          response.cookies.set({
+            name,
+            value: '',
+            ...options,
+          })
+        },
+      },
     }
+  )
 
-    const path = request.nextUrl.pathname
+  // Refresh session if expired - required for Server Components
+  await supabase.auth.getUser()
 
-    // Define public paths that don't require authentication
-    const publicPaths = [
-      '/login', 
-      '/signup', 
-      '/auth/callback',
-      '/auth/confirm',
-      '/auth/reset-password',
-      '/api/auth',
-      '/_next',
-      '/static',
-      '/favicon.ico',
-      '/logo.png',
-      '/manifest.json',
-      '/robots.txt'
-    ]
-    
-    const isPublicPath = publicPaths.some(publicPath => 
-      path.startsWith(publicPath) || 
-      path.match(/\.(ico|png|jpg|jpeg|svg|css|js|json)$/)
-    )
+  const {
+    data: { session },
+  } = await supabase.auth.getSession()
 
-    // If the user is not authenticated and trying to access a protected route
-    if (!session && !isPublicPath) {
-      const redirectUrl = new URL('/login', request.url)
-      redirectUrl.searchParams.set('redirectTo', path)
-      return NextResponse.redirect(redirectUrl)
-    }
+  // Protected routes that require authentication
+  const protectedPaths = ['/', '/dashboard', '/habits', '/todos', '/reminders', '/notes', '/calendar', '/activity']
+  const isProtectedPath = protectedPaths.some(path => 
+    request.nextUrl.pathname === path || request.nextUrl.pathname.startsWith(path + '/')
+  )
 
-    // If the user is authenticated and trying to access login/signup pages
-    if (session && isPublicPath && !path.match(/\.(ico|png|jpg|jpeg|svg|css|js|json)$/)) {
-      const redirectUrl = new URL('/', request.url)
-      return NextResponse.redirect(redirectUrl)
-    }
+  // Auth routes that should redirect if already authenticated
+  const authPaths = ['/login', '/register', '/forgot-password', '/reset-password']
+  const isAuthPath = authPaths.some(path => request.nextUrl.pathname.startsWith(path))
 
-    return response
-  } catch (error) {
-    console.error('Middleware error:', error)
-    return NextResponse.redirect(new URL('/login', request.url))
+  if (isProtectedPath && !session) {
+    // Redirect to login if trying to access protected route without session
+    const redirectUrl = new URL('/login', request.url)
+    redirectUrl.searchParams.set('redirectTo', request.nextUrl.pathname)
+    return NextResponse.redirect(redirectUrl)
   }
+
+  if (isAuthPath && session) {
+    // Redirect to home if trying to access auth pages while authenticated
+    return NextResponse.redirect(new URL('/', request.url))
+  }
+
+  // Check session expiry
+  if (session) {
+    const now = Math.floor(Date.now() / 1000)
+    if (session.expires_at && session.expires_at < now) {
+      // Session expired, redirect to login
+      const redirectUrl = new URL('/login', request.url)
+      redirectUrl.searchParams.set('message', 'Session expired')
+      if (isProtectedPath) {
+        redirectUrl.searchParams.set('redirectTo', request.nextUrl.pathname)
+      }
+      
+      // Clear the session
+      await supabase.auth.signOut()
+      
+      return NextResponse.redirect(redirectUrl)
+    }
+  }
+
+  return response
 }
 
 export const config = {
@@ -102,8 +112,8 @@ export const config = {
      * - _next/static (static files)
      * - _next/image (image optimization files)
      * - favicon.ico (favicon file)
-     * - public files (images, etc)
+     * - public folder files
      */
-    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|css|js|json)$).*)',
+    '/((?!_next/static|_next/image|favicon.ico|public|api).*)',
   ],
 }
