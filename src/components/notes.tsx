@@ -729,24 +729,24 @@ export default function Notes() {
           </div>
           
           <div className="flex gap-2">
-            <Select value={selectedTag || ""} onValueChange={(v) => setSelectedTag(v || null)}>
+            <Select value={selectedTag || "all-tags"} onValueChange={(v) => setSelectedTag(v === "all-tags" ? null : v)}>
               <SelectTrigger className="w-40">
                 <SelectValue placeholder="Filter by tag" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All tags</SelectItem>
+                <SelectItem value="all-tags">All tags</SelectItem>
                 {userTags.map(tag => (
                   <SelectItem key={tag} value={tag}>{tag}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
 
-            <Select value={selectedType || ""} onValueChange={(v) => setSelectedType((v as NoteType) || null)}>
+            <Select value={selectedType || "all-types"} onValueChange={(v) => setSelectedType(v === "all-types" ? null : (v as NoteType))}>
               <SelectTrigger className="w-40">
                 <SelectValue placeholder="Filter by type" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All types</SelectItem>
+                <SelectItem value="all-types">All types</SelectItem>
                 <SelectItem value="text">Text</SelectItem>
                 <SelectItem value="rich_text">Rich Text</SelectItem>
                 <SelectItem value="drawing">Drawing</SelectItem>
