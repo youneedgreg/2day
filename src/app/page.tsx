@@ -3,14 +3,12 @@
 import { useState, useEffect, useRef } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import HabitTracker from "@/components/habit-tracker"
 import TodoList from "@/components/todo-list"
 import Reminders from "@/components/reminders"
 import Notes from "@/components/notes"
 import Dashboard from "@/components/dashboard"
-import Navbar from "@/components/navbar"
 import ProductivityLoader, { PageLoader } from "@/components/ui/loader"
 import Image from "next/image"
 import ActivityStream from "@/components/activity"
@@ -27,13 +25,10 @@ import {
   Moon, 
   ActivityIcon,
   CalendarCheck,
-  User,
   Settings,
   LogOut,
   Edit,
   ChevronDown,
-  Mail,
-  Shield
 } from "lucide-react"
 import { createClient } from '@/lib/utils/supabase/client'
 import { useRouter } from 'next/navigation'
