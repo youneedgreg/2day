@@ -1,8 +1,10 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Button } from "@/components/ui/button"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import HabitTracker from "@/components/habit-tracker"
 import TodoList from "@/components/todo-list"
 import Reminders from "@/components/reminders"
@@ -24,11 +26,19 @@ import {
   Calendar as CalendarIcon,
   Moon, 
   ActivityIcon,
-  CalendarCheck
+  CalendarCheck,
+  User,
+  Settings,
+  LogOut,
+  Edit,
+  ChevronDown,
+  Mail,
+  Shield
 } from "lucide-react"
 import { createClient } from '@/lib/utils/supabase/client'
 import { useRouter } from 'next/navigation'
-import type { Session, User } from '@supabase/supabase-js'
+import type { Session, User as SupabaseUser } from '@supabase/supabase-js'
+import { toast } from 'sonner'
 
 export default function Home() {
   const [mounted, setMounted] = useState(false)
@@ -38,8 +48,13 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(true)
   const [contentLoading, setContentLoading] = useState(false)
   const [session, setSession] = useState<Session | null>(null)
-  const [user, setUser] = useState<User | null>(null)
+  const [user, setUser] = useState<SupabaseUser | null>(null)
   const [authError, setAuthError] = useState<string | null>(null)
+  
+  // Account dropdown state
+  const [isAccountOpen, setIsAccountOpen] = useState(false)
+  const [isSigningOut, setIsSigningOut] = useState(false)
+  const accountRef = useRef<HTMLDivElement>(null)
   
   const router = useRouter()
   const supabase = createClient()
@@ -179,6 +194,18 @@ export default function Home() {
     }
   }, [router, supabase])
 
+  // Close account dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (accountRef.current && !accountRef.current.contains(event.target as Node)) {
+        setIsAccountOpen(false)
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
   // Session refresh interval (refresh 5 minutes before expiry)
   useEffect(() => {
     if (!session) return
@@ -229,6 +256,47 @@ export default function Home() {
     }, 800)
   }
 
+  // Handle sign out
+  const handleSignOut = async () => {
+    try {
+      setIsSigningOut(true)
+      const { error } = await supabase.auth.signOut()
+      
+      if (error) {
+        console.error('Sign out error:', error.message)
+        toast.error('Failed to sign out')
+      } else {
+        toast.success('Signed out successfully')
+        router.replace('/login')
+      }
+    } catch (error) {
+      console.error('Sign out error:', error)
+      toast.error('Failed to sign out')
+    } finally {
+      setIsSigningOut(false)
+      setIsAccountOpen(false)
+    }
+  }
+
+  // Handle account update navigation
+  const handleEditAccount = () => {
+    setIsAccountOpen(false)
+    router.push('/account')
+  }
+
+  // Get user initials for avatar
+  const getUserInitials = () => {
+    if (user?.user_metadata?.full_name) {
+      return user.user_metadata.full_name
+        .split(' ')
+        .map((name: string) => name[0])
+        .join('')
+        .toUpperCase()
+        .slice(0, 2)
+    }
+    return user?.email?.slice(0, 2).toUpperCase() || 'U'
+  }
+
   // Don't render anything until mounted
   if (!mounted) {
     return null
@@ -273,8 +341,130 @@ export default function Home() {
 
   return (
     <div className="h-screen flex flex-col">
-      {/* Add Navbar at the top */}
-      <Navbar />
+      {/* Enhanced Header with Account Dropdown */}
+      <motion.header 
+        initial={{ y: -20, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        className="flex-shrink-0 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 z-50"
+      >
+        <div className="flex items-center justify-between px-4 md:px-6 py-3">
+          {/* Logo Section */}
+          <div className="flex items-center gap-2">
+            <motion.div
+              whileHover={{ rotate: 10, scale: 1.1 }}
+              transition={{ type: "spring", stiffness: 400, damping: 10 }}
+            >
+              <Image
+                src="/logo.png"
+                alt="2day Logo"
+                width={32}
+                height={32}
+                className="h-8 w-8"
+              />
+            </motion.div>
+            <h1 className="text-2xl md:text-3xl font-bold bg-gradient-to-r from-primary to-purple-500 bg-clip-text text-transparent">
+              2day
+            </h1>
+          </div>
+
+          {/* Right Section with Theme Toggle and Account */}
+          <div className="flex items-center gap-2">
+            {/* Theme Toggle */}
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={toggleTheme}
+              className="p-2 rounded-full bg-muted/50 hover:bg-muted transition-colors"
+            >
+              {theme === "light" ? <Moon className="h-5 w-5" /> : <Sun className="h-5 w-5" />}
+            </motion.button>
+
+            {/* Account Dropdown */}
+            <div className="relative" ref={accountRef}>
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={() => setIsAccountOpen(!isAccountOpen)}
+                className="flex items-center gap-2 p-2 rounded-full hover:bg-muted transition-colors"
+              >
+                <Avatar className="h-8 w-8">
+                  <AvatarImage src={user?.user_metadata?.avatar_url} />
+                  <AvatarFallback className="bg-gradient-to-br from-blue-500 to-purple-600 text-white text-sm font-medium">
+                    {getUserInitials()}
+                  </AvatarFallback>
+                </Avatar>
+                <ChevronDown className={`h-4 w-4 transition-transform duration-200 ${isAccountOpen ? 'rotate-180' : ''}`} />
+              </motion.button>
+
+              {/* Account Dropdown Menu */}
+              <AnimatePresence>
+                {isAccountOpen && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                    transition={{ duration: 0.2 }}
+                    className="absolute right-0 top-full mt-2 w-64 bg-background border rounded-lg shadow-lg overflow-hidden z-50"
+                  >
+                    {/* User Info Header */}
+                    <div className="p-4 bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-950/50 dark:to-purple-950/50 border-b">
+                      <div className="flex items-center gap-3">
+                        <Avatar className="h-10 w-10">
+                          <AvatarImage src={user?.user_metadata?.avatar_url} />
+                          <AvatarFallback className="bg-gradient-to-br from-blue-500 to-purple-600 text-white">
+                            {getUserInitials()}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-sm truncate">
+                            {user?.user_metadata?.full_name || 'User'}
+                          </p>
+                          <p className="text-xs text-muted-foreground truncate">
+                            {user?.email}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Menu Items */}
+                    <div className="py-2">
+                      <button
+                        onClick={handleEditAccount}
+                        className="w-full px-4 py-2 text-left hover:bg-muted transition-colors flex items-center gap-3"
+                      >
+                        <Edit className="h-4 w-4" />
+                        <span className="text-sm">Edit Account</span>
+                      </button>
+                      
+                      <div className="border-t mx-2 my-2"></div>
+                      
+                      <button
+                        onClick={handleSignOut}
+                        disabled={isSigningOut}
+                        className="w-full px-4 py-2 text-left hover:bg-red-50 dark:hover:bg-red-950/20 transition-colors flex items-center gap-3 text-red-600 dark:text-red-400"
+                      >
+                        {isSigningOut ? (
+                          <motion.div
+                            animate={{ rotate: 360 }}
+                            transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+                          >
+                            <Settings className="h-4 w-4" />
+                          </motion.div>
+                        ) : (
+                          <LogOut className="h-4 w-4" />
+                        )}
+                        <span className="text-sm">
+                          {isSigningOut ? 'Signing out...' : 'Sign Out'}
+                        </span>
+                      </button>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+          </div>
+        </div>
+      </motion.header>
 
       <div className="flex flex-1 overflow-hidden">
         {/* Side Panel for Desktop - Fixed position, not scrollable */}
@@ -284,27 +474,7 @@ export default function Home() {
             animate={{ x: 0, opacity: 1 }}
             className={`w-64 flex-shrink-0 flex flex-col border-r h-full overflow-y-auto ${theme === 'dark' ? 'bg-gray-900 border-gray-800' : 'bg-gray-50 border-gray-200'}`}
           >
-            <div className="p-6 flex-shrink-0">
-              <div className="flex items-center gap-2 mb-8">
-                <motion.div
-                  whileHover={{ rotate: 10, scale: 1.1 }}
-                  transition={{ type: "spring", stiffness: 400, damping: 10 }}
-                >
-                  <Image
-                    src="/logo.png"
-                    alt="2day Logo"
-                    width={32}
-                    height={32}
-                    className="h-8 w-8"
-                  />
-                </motion.div>
-                <h1 className="text-2xl font-bold bg-gradient-to-r from-primary to-purple-500 bg-clip-text text-transparent">
-                  2day
-                </h1>
-              </div>
-            </div>
-            
-            <nav className="flex-1 overflow-y-auto p-6 pt-0 space-y-1">
+            <nav className="flex-1 overflow-y-auto p-6 space-y-1">
               {navItems.map((item) => (
                 <button
                   key={item.value}
@@ -320,27 +490,6 @@ export default function Home() {
                 </button>
               ))}
             </nav>
-            
-            <div className="p-6 flex-shrink-0">
-              <motion.button
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                onClick={toggleTheme}
-                className={`w-full p-3 rounded-lg flex items-center gap-3 ${theme === 'dark' ? 'bg-gray-800 hover:bg-gray-700' : 'bg-gray-100 hover:bg-gray-200'}`}
-              >
-                {theme === "light" ? (
-                  <>
-                    <Moon className="h-5 w-5" />
-                    <span>Dark Mode</span>
-                  </>
-                ) : (
-                  <>
-                    <Sun className="h-5 w-5" />
-                    <span>Light Mode</span>
-                  </>
-                )}
-              </motion.button>
-            </div>
           </motion.div>
         )}
         
@@ -351,42 +500,6 @@ export default function Home() {
           transition={{ duration: 0.5 }}
           className="flex-1 overflow-y-auto"
         >
-          {/* Mobile Header */}
-          {isMobile && (
-            <motion.div
-              className="flex justify-between items-center px-3 py-4 sticky top-0 z-10 bg-background"
-              initial={{ y: -20 }}
-              animate={{ y: 0 }}
-              transition={{ type: "spring", stiffness: 300, damping: 20 }}
-            >
-              <div className="flex items-center gap-2">
-                <motion.div
-                  whileHover={{ rotate: 10, scale: 1.1 }}
-                  transition={{ type: "spring", stiffness: 400, damping: 10 }}
-                >
-                  <Image
-                    src="/logo.png"
-                    alt="2day Logo"
-                    width={32}
-                    height={32}
-                    className="h-8 w-8"
-                  />
-                </motion.div>
-                <h1 className="text-3xl font-bold bg-gradient-to-r from-primary to-purple-500 bg-clip-text text-transparent">
-                  2day
-                </h1>
-              </div>
-              <motion.button
-                whileHover={{ scale: 1.1 }}
-                whileTap={{ scale: 0.95 }}
-                onClick={toggleTheme}
-                className="p-2 rounded-full bg-muted/50"
-              >
-                {theme === "light" ? <Moon className="h-5 w-5" /> : <Sun className="h-5 w-5" />}
-              </motion.button>
-            </motion.div>
-          )}
-
           {/* Mobile Tab Switcher - Sticky at top */}
           {isMobile && (
             <Tabs 
