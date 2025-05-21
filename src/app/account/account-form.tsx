@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { motion, AnimatePresence } from "framer-motion"
 import { createClient } from '@/lib/utils/supabase/client'
-import { type User } from '@supabase/supabase-js'
+import { type User as SupabaseUser } from '@supabase/supabase-js'
 import { useRouter } from 'next/navigation'
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -15,7 +15,7 @@ import { Badge } from "@/components/ui/badge"
 import { Switch } from "@/components/ui/switch"
 import { 
   ArrowLeft, 
-  User, 
+  User as UserIcon, 
   Mail, 
   Globe, 
   Camera, 
@@ -23,21 +23,15 @@ import {
   Loader2, 
   Shield, 
   Bell, 
-  Eye, 
-  EyeOff,
   Trash2,
-  Download,
-  Upload,
   Settings,
   LogOut,
-  Check,
-  X,
   AlertTriangle
 } from "lucide-react"
 import { toast } from 'sonner'
 
 interface AccountFormProps {
-  user: User | null
+  user: SupabaseUser | null
 }
 
 export default function AccountForm({ user }: AccountFormProps) {
@@ -86,7 +80,8 @@ export default function AccountForm({ user }: AccountFormProps) {
       }
       
       setInitialDataLoaded(true)
-    } catch (err) {
+    } catch (error) {
+      console.error('Profile fetch error:', error)
       toast.error('Failed to load profile data')
     } finally {
       setLoading(false)
@@ -115,7 +110,8 @@ export default function AccountForm({ user }: AccountFormProps) {
       if (updateError) throw updateError
       
       toast.success('Profile updated successfully!')
-    } catch (err) {
+    } catch (error) {
+      console.error('Profile update error:', error)
       toast.error('Failed to update profile')
     } finally {
       setSaving(false)
@@ -139,7 +135,8 @@ export default function AccountForm({ user }: AccountFormProps) {
       
       setAvatarUrl(data.publicUrl)
       toast.success('Avatar uploaded successfully!')
-    } catch (err) {
+    } catch (error) {
+      console.error('Avatar upload error:', error)
       toast.error('Failed to upload avatar')
     } finally {
       setUploading(false)
@@ -183,7 +180,8 @@ export default function AccountForm({ user }: AccountFormProps) {
       
       toast.success('Signed out successfully')
       router.push('/login')
-    } catch (err) {
+    } catch (error) {
+      console.error('Sign out error:', error)
       toast.error('Failed to sign out')
     }
   }
@@ -277,7 +275,7 @@ export default function AccountForm({ user }: AccountFormProps) {
               <CardContent className="p-4">
                 <nav className="space-y-2">
                   {[
-                    { id: 'profile', label: 'Profile', icon: User },
+                    { id: 'profile', label: 'Profile', icon: UserIcon },
                     { id: 'security', label: 'Security', icon: Shield },
                     { id: 'notifications', label: 'Notifications', icon: Bell },
                     { id: 'danger', label: 'Danger Zone', icon: AlertTriangle },
@@ -315,7 +313,7 @@ export default function AccountForm({ user }: AccountFormProps) {
                   <Card>
                     <CardHeader>
                       <CardTitle className="flex items-center gap-2">
-                        <User className="h-5 w-5" />
+                        <UserIcon className="h-5 w-5" />
                         Profile Information
                       </CardTitle>
                       <CardDescription>
@@ -390,7 +388,7 @@ export default function AccountForm({ user }: AccountFormProps) {
                         <div className="space-y-2">
                           <Label htmlFor="fullname">Full Name</Label>
                           <div className="relative">
-                            <User className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 h-4 w-4" />
+                            <UserIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 h-4 w-4" />
                             <Input
                               id="fullname"
                               type="text"
