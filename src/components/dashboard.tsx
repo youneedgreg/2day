@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { motion } from "framer-motion"
+import { motion, AnimatePresence } from "framer-motion"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Button } from "@/components/ui/button"
@@ -10,14 +10,40 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
+import { Badge } from "@/components/ui/badge"
 import { 
   BarChart, PieChart, TrendingUp, Award, Target, Zap, CheckSquare, Bell, 
-  Plus, Edit, Trash2, Move, Settings, Save 
+  Plus, Edit, Trash2, Move, Settings, Save, Calendar, Clock, 
+  ArrowUp, ArrowDown, Loader2, Sparkles, Trophy, TrendingDown, Activity
 } from "lucide-react"
-import { getHabits, getTodos, getReminders, Habit, Todo, Reminder } from "@/lib/storage"
+import { useAuth } from '@/hooks/useAuth'
+import { getHabits, type HabitWithCompletions } from '@/lib/utils/database/habits'
+import { getTodos, type TodoWithRelations } from '@/lib/utils/database/todos'
+import { getReminders } from '@/lib/utils/database/reminders'
+import { getNotes } from '@/lib/utils/database/notes'
+import { Database } from '@/lib/types/database'
+import { 
+  format, 
+  isToday, 
+  startOfWeek, 
+  endOfWeek, 
+  startOfMonth, 
+  endOfMonth,
+  subDays,
+  subWeeks,
+  subMonths,
+  isWithinInterval,
+  parseISO,
+  differenceInDays
+} from 'date-fns'
+import { toast } from 'sonner'
+
+// Types from database
+type Reminder = Database['public']['Tables']['reminders']['Row']
+type Note = Database['public']['Tables']['notes']['Row']
 
 // Card configuration types
-export type CardType = 'habits' | 'tasks' | 'streak' | 'reminders' | 'habitChart' | 'taskChart'
+export type CardType = 'habits' | 'tasks' | 'streak' | 'reminders' | 'notes' | 'habitChart' | 'taskChart' | 'activitySummary'
 export type CardConfig = {
   id: string;
   type: CardType;
@@ -29,12 +55,13 @@ export type CardConfig = {
 }
 
 const defaultCards: CardConfig[] = [
-  { id: 'habits', type: 'habits', title: 'Habits', icon: 'Target', enabled: true, position: 0, size: 'small' },
-  { id: 'tasks', type: 'tasks', title: 'Tasks', icon: 'CheckSquare', enabled: true, position: 1, size: 'small' },
-  { id: 'streak', type: 'streak', title: 'Streak', icon: 'Zap', enabled: true, position: 2, size: 'small' },
+  { id: 'habits', type: 'habits', title: 'Daily Habits', icon: 'Target', enabled: true, position: 0, size: 'small' },
+  { id: 'tasks', type: 'tasks', title: 'Tasks Today', icon: 'CheckSquare', enabled: true, position: 1, size: 'small' },
+  { id: 'streak', type: 'streak', title: 'Best Streak', icon: 'Zap', enabled: true, position: 2, size: 'small' },
   { id: 'reminders', type: 'reminders', title: 'Reminders', icon: 'Bell', enabled: true, position: 3, size: 'small' },
-  { id: 'habitChart', type: 'habitChart', title: 'Habit Completion', icon: 'BarChart', enabled: true, position: 4, size: 'medium' },
-  { id: 'taskChart', type: 'taskChart', title: 'Task Distribution', icon: 'PieChart', enabled: true, position: 5, size: 'medium' },
+  { id: 'habitChart', type: 'habitChart', title: 'Habit Trends', icon: 'BarChart', enabled: true, position: 4, size: 'medium' },
+  { id: 'taskChart', type: 'taskChart', title: 'Task Overview', icon: 'PieChart', enabled: true, position: 5, size: 'medium' },
+  { id: 'activitySummary', type: 'activitySummary', title: 'Activity Summary', icon: 'Activity', enabled: true, position: 6, size: 'large' },
 ]
 
 // Map icon strings to components
@@ -47,12 +74,72 @@ const iconMap = {
   PieChart: PieChart,
   TrendingUp: TrendingUp,
   Award: Award,
+  Activity: Activity,
+  Sparkles: Sparkles,
+  Trophy: Trophy,
+}
+
+// Helper function to parse habit metadata
+const parseHabitMetadata = (description: string | null) => {
+  if (!description) return { type: 'builder', frequency_days: [] }
+  
+  try {
+    const parsed = JSON.parse(description)
+    return {
+      type: parsed.type || 'builder',
+      frequency_days: parsed.frequency_days || []
+    }
+  } catch {
+    return { type: 'builder', frequency_days: [] }
+  }
+}
+
+// Helper function to check if habit is completed today
+const isHabitCompletedToday = (habit: HabitWithCompletions): boolean => {
+  const today = format(new Date(), 'yyyy-MM-dd')
+  return habit.habit_completions.some(completion => 
+    completion.completed_at.split('T')[0] === today
+  )
+}
+
+// Helper function to calculate habit streaks
+const calculateHabitStreak = (habit: HabitWithCompletions): number => {
+  const sortedCompletions = habit.habit_completions
+    .map(c => c.completed_at.split('T')[0])
+    .sort()
+    .reverse()
+
+  if (sortedCompletions.length === 0) return 0
+
+  let streak = 0
+  const today = new Date()
+  
+  for (let i = 0; i < sortedCompletions.length; i++) {
+    const completionDate = new Date(sortedCompletions[i])
+    const expectedDate = new Date(today)
+    expectedDate.setDate(today.getDate() - i)
+    
+    if (format(completionDate, 'yyyy-MM-dd') === format(expectedDate, 'yyyy-MM-dd')) {
+      streak++
+    } else {
+      break
+    }
+  }
+  
+  return streak
 }
 
 export default function Dashboard() {
-  const [habits, setHabits] = useState<Habit[]>([])
-  const [todos, setTodos] = useState<Todo[]>([])
+  const { user } = useAuth()
+  
+  // Data state
+  const [habits, setHabits] = useState<HabitWithCompletions[]>([])
+  const [todos, setTodos] = useState<TodoWithRelations[]>([])
   const [reminders, setReminders] = useState<Reminder[]>([])
+  const [notes, setNotes] = useState<Note[]>([])
+  const [loading, setLoading] = useState(true)
+  
+  // UI state
   const [mounted, setMounted] = useState(false)
   const [cards, setCards] = useState<CardConfig[]>([])
   const [editingCard, setEditingCard] = useState<CardConfig | null>(null)
@@ -60,20 +147,25 @@ export default function Dashboard() {
   const [timeframe, setTimeframe] = useState('daily')
   const [isConfigOpen, setIsConfigOpen] = useState(false)
 
+  // Load data on component mount
   useEffect(() => {
     setMounted(true)
-    setHabits(getHabits())
-    setTodos(getTodos())
-    setReminders(getReminders())
-    
-    // Load saved card configuration or use defaults
-    const savedCards = localStorage.getItem('dashboardCards')
-    if (savedCards) {
-      setCards(JSON.parse(savedCards))
-    } else {
-      setCards(defaultCards)
+    if (user) {
+      loadData()
     }
-  }, [])
+  }, [user])
+
+  // Load saved card configuration
+  useEffect(() => {
+    if (mounted) {
+      const savedCards = localStorage.getItem('dashboardCards')
+      if (savedCards) {
+        setCards(JSON.parse(savedCards))
+      } else {
+        setCards(defaultCards)
+      }
+    }
+  }, [mounted])
 
   // Save card configuration when it changes
   useEffect(() => {
@@ -82,17 +174,69 @@ export default function Dashboard() {
     }
   }, [cards, mounted])
 
-  if (!mounted) return null
+  // Load all data from database
+  const loadData = async () => {
+    if (!user) return
+    
+    try {
+      setLoading(true)
+      
+      const [habitsData, todosData, remindersData, notesData] = await Promise.all([
+        getHabits(user.id),
+        getTodos(user.id),
+        getReminders(user.id),
+        getNotes(user.id)
+      ])
+      
+      setHabits(habitsData)
+      setTodos(todosData.filter(todo => todo.status !== 'archived'))
+      setReminders(remindersData.filter(reminder => reminder.status !== 'dismissed'))
+      setNotes(notesData.filter(note => !note.is_archived))
+      
+    } catch (error) {
+      console.error('Error loading dashboard data:', error)
+      toast.error('Failed to load dashboard data')
+    } finally {
+      setLoading(false)
+    }
+  }
 
-  const completedTodos = todos.filter((todo) => todo.completed).length
-  const totalTodos = todos.length
-  const todoCompletionRate = totalTodos > 0 ? Math.round((completedTodos / totalTodos) * 100) : 0
+  if (!mounted || loading) {
+    return (
+      <div className="flex justify-center items-center py-20">
+        <div className="flex items-center gap-2">
+          <Loader2 className="h-6 w-6 animate-spin" />
+          <span>Loading dashboard...</span>
+        </div>
+      </div>
+    )
+  }
 
-  const completedHabits = habits.filter((habit) =>
-    habit.history.some((entry) => entry.date === new Date().toISOString().split("T")[0] && entry.completed),
-  ).length
-  const totalHabits = habits.length
-  const habitCompletionRate = totalHabits > 0 ? Math.round((completedHabits / totalHabits) * 100) : 0
+  // Calculate statistics
+  const todaysTodos = todos.filter(todo => {
+    if (todo.due_date) {
+      return isToday(parseISO(todo.due_date))
+    }
+    return isToday(parseISO(todo.created_at))
+  })
+  
+  const completedTodaysTodos = todaysTodos.filter(todo => todo.status === 'completed').length
+  const totalTodaysTodos = todaysTodos.length
+  const todoCompletionRate = totalTodaysTodos > 0 ? Math.round((completedTodaysTodos / totalTodaysTodos) * 100) : 0
+
+  const todaysHabits = habits.filter(habit => {
+    const metadata = parseHabitMetadata(habit.description)
+    if (metadata.frequency_days.length === 0) return true // Daily habit
+    const dayOfWeek = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][new Date().getDay()]
+    return metadata.frequency_days.includes(dayOfWeek)
+  })
+  
+  const completedTodaysHabits = todaysHabits.filter(isHabitCompletedToday).length
+  const totalTodaysHabits = todaysHabits.length
+  const habitCompletionRate = totalTodaysHabits > 0 ? Math.round((completedTodaysHabits / totalTodaysHabits) * 100) : 0
+
+  const bestStreak = habits.length > 0 ? Math.max(...habits.map(calculateHabitStreak)) : 0
+  const pendingReminders = reminders.filter(r => r.status === 'pending').length
 
   const cardVariants = {
     hidden: { opacity: 0, y: 20 },
@@ -100,26 +244,25 @@ export default function Dashboard() {
       opacity: 1,
       y: 0,
       transition: {
-        delay: i * 0.1,
+        delay: i * 0.05,
         duration: 0.4,
         ease: "easeOut",
       },
     }),
   }
 
-  // Save current card configuration
   const saveCardConfig = () => {
     localStorage.setItem('dashboardCards', JSON.stringify(cards))
     setIsEditMode(false)
+    toast.success('Dashboard layout saved!')
   }
 
-  // Reset to default configuration
   const resetToDefaults = () => {
     setCards(defaultCards)
     localStorage.setItem('dashboardCards', JSON.stringify(defaultCards))
+    toast.success('Dashboard reset to default layout!')
   }
 
-  // Add a new card
   const addCard = () => {
     const newId = `card-${Date.now()}`
     const newCard: CardConfig = {
@@ -136,63 +279,69 @@ export default function Dashboard() {
     setIsConfigOpen(true)
   }
 
-  // Update a card's configuration
   const updateCard = (updatedCard: CardConfig) => {
     setCards(cards.map(card => card.id === updatedCard.id ? updatedCard : card))
     setEditingCard(null)
     setIsConfigOpen(false)
+    toast.success('Card updated!')
   }
 
-  // Delete a card
   const deleteCard = (id: string) => {
     setCards(cards.filter(card => card.id !== id).map((card, index) => ({
       ...card,
       position: index
     })))
+    toast.success('Card removed!')
   }
 
-  // Move card up in order
   const moveCardUp = (index: number) => {
     if (index <= 0) return
     const newCards = [...cards]
     const temp = newCards[index - 1].position
     newCards[index - 1].position = newCards[index].position
     newCards[index].position = temp
-    // Sort by position
     setCards(newCards.sort((a, b) => a.position - b.position))
   }
 
-  // Move card down in order
   const moveCardDown = (index: number) => {
     if (index >= cards.length - 1) return
     const newCards = [...cards]
     const temp = newCards[index + 1].position
     newCards[index + 1].position = newCards[index].position
     newCards[index].position = temp
-    // Sort by position
     setCards(newCards.sort((a, b) => a.position - b.position))
   }
 
-  // Render the card based on its type
+  // Render card content based on type
   const renderCardContent = (card: CardConfig) => {
     const IconComponent = iconMap[card.icon as keyof typeof iconMap] || Target
 
     switch (card.type) {
       case 'habits':
         return (
-          <Card className="overflow-hidden border-t-4 border-t-blue-500">
-            <CardHeader className="pb-1 px-3 py-1">
-              <CardTitle className="text-xs sm:text-sm font-medium flex items-center gap-1">
-                <IconComponent className="h-3 w-3 sm:h-4 sm:w-4 text-blue-500" />
+          <Card className="overflow-hidden border-0 shadow-sm bg-gradient-to-br from-blue-50 to-blue-100/50 dark:from-blue-950/30 dark:to-blue-900/20">
+            <CardHeader className="pb-2 px-4 py-3">
+              <CardTitle className="text-sm font-medium flex items-center gap-2">
+                <div className="p-1.5 rounded-lg bg-blue-500/10">
+                  <IconComponent className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                </div>
                 {card.title}
               </CardTitle>
             </CardHeader>
-            <CardContent className="px-3 pb-2 pt-0">
-              <div className="flex flex-col items-center justify-center h-10 sm:h-14 md:h-24">
-                <div className="text-xl sm:text-2xl md:text-3xl font-bold">{habitCompletionRate}%</div>
+            <CardContent className="px-4 pb-4 pt-0">
+              <div className="flex flex-col items-center justify-center">
+                <div className="relative">
+                  <div className="text-3xl font-bold text-blue-700 dark:text-blue-300">{habitCompletionRate}%</div>
+                  {habitCompletionRate === 100 && totalTodaysHabits > 0 && (
+                    <Sparkles className="absolute -top-1 -right-1 h-4 w-4 text-yellow-500" />
+                  )}
+                </div>
                 <p className="text-xs text-muted-foreground mt-1 text-center">
-                  {completedHabits}/{totalHabits} done
+                  {completedTodaysHabits}/{totalTodaysHabits} completed today
                 </p>
+                {totalTodaysHabits === 0 && (
+                  <Badge variant="outline" className="text-xs mt-2">No habits scheduled</Badge>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -200,19 +349,29 @@ export default function Dashboard() {
       
       case 'tasks':
         return (
-          <Card className="overflow-hidden border-t-4 border-t-green-500">
-            <CardHeader className="pb-1 px-3 py-1">
-              <CardTitle className="text-xs sm:text-sm font-medium flex items-center gap-1">
-                <IconComponent className="h-3 w-3 sm:h-4 sm:w-4 text-green-500" />
+          <Card className="overflow-hidden border-0 shadow-sm bg-gradient-to-br from-green-50 to-green-100/50 dark:from-green-950/30 dark:to-green-900/20">
+            <CardHeader className="pb-2 px-4 py-3">
+              <CardTitle className="text-sm font-medium flex items-center gap-2">
+                <div className="p-1.5 rounded-lg bg-green-500/10">
+                  <IconComponent className="h-4 w-4 text-green-600 dark:text-green-400" />
+                </div>
                 {card.title}
               </CardTitle>
             </CardHeader>
-            <CardContent className="px-3 pb-2 pt-0">
-              <div className="flex flex-col items-center justify-center h-10 sm:h-14 md:h-24">
-                <div className="text-xl sm:text-2xl md:text-3xl font-bold">{todoCompletionRate}%</div>
+            <CardContent className="px-4 pb-4 pt-0">
+              <div className="flex flex-col items-center justify-center">
+                <div className="relative">
+                  <div className="text-3xl font-bold text-green-700 dark:text-green-300">{todoCompletionRate}%</div>
+                  {todoCompletionRate === 100 && totalTodaysTodos > 0 && (
+                    <Trophy className="absolute -top-1 -right-1 h-4 w-4 text-yellow-500" />
+                  )}
+                </div>
                 <p className="text-xs text-muted-foreground mt-1 text-center">
-                  {completedTodos}/{totalTodos} done
+                  {completedTodaysTodos}/{totalTodaysTodos} done today
                 </p>
+                {totalTodaysTodos === 0 && (
+                  <Badge variant="outline" className="text-xs mt-2">No tasks for today</Badge>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -220,19 +379,31 @@ export default function Dashboard() {
         
       case 'streak':
         return (
-          <Card className="overflow-hidden border-t-4 border-t-purple-500">
-            <CardHeader className="pb-1 px-3 py-1">
-              <CardTitle className="text-xs sm:text-sm font-medium flex items-center gap-1">
-                <IconComponent className="h-3 w-3 sm:h-4 sm:w-4 text-purple-500" />
+          <Card className="overflow-hidden border-0 shadow-sm bg-gradient-to-br from-purple-50 to-purple-100/50 dark:from-purple-950/30 dark:to-purple-900/20">
+            <CardHeader className="pb-2 px-4 py-3">
+              <CardTitle className="text-sm font-medium flex items-center gap-2">
+                <div className="p-1.5 rounded-lg bg-purple-500/10">
+                  <IconComponent className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+                </div>
                 {card.title}
               </CardTitle>
             </CardHeader>
-            <CardContent className="px-3 pb-2 pt-0">
-              <div className="flex flex-col items-center justify-center h-10 sm:h-14 md:h-24">
-                <div className="text-xl sm:text-2xl md:text-3xl font-bold">
-                  {habits.length > 0 ? Math.max(...habits.map((habit) => habit.streak)) : 0}
+            <CardContent className="px-4 pb-4 pt-0">
+              <div className="flex flex-col items-center justify-center">
+                <div className="relative">
+                  <div className="text-3xl font-bold text-purple-700 dark:text-purple-300">{bestStreak}</div>
+                  {bestStreak >= 7 && (
+                    <div className="absolute -top-1 -right-1 flex">
+                      <Zap className="h-4 w-4 text-orange-500" />
+                    </div>
+                  )}
                 </div>
-                <p className="text-xs text-muted-foreground mt-1 text-center">days</p>
+                <p className="text-xs text-muted-foreground mt-1 text-center">
+                  days in a row
+                </p>
+                {bestStreak >= 30 && (
+                  <Badge variant="secondary" className="text-xs mt-2">🔥 On fire!</Badge>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -240,247 +411,308 @@ export default function Dashboard() {
         
       case 'reminders':
         return (
-          <Card className="overflow-hidden border-t-4 border-t-amber-500">
-            <CardHeader className="pb-1 px-3 py-1">
-              <CardTitle className="text-xs sm:text-sm font-medium flex items-center gap-1">
-                <IconComponent className="h-3 w-3 sm:h-4 sm:w-4 text-amber-500" />
+          <Card className="overflow-hidden border-0 shadow-sm bg-gradient-to-br from-amber-50 to-amber-100/50 dark:from-amber-950/30 dark:to-amber-900/20">
+            <CardHeader className="pb-2 px-4 py-3">
+              <CardTitle className="text-sm font-medium flex items-center gap-2">
+                <div className="p-1.5 rounded-lg bg-amber-500/10">
+                  <IconComponent className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                </div>
                 {card.title}
               </CardTitle>
             </CardHeader>
-            <CardContent className="px-3 pb-2 pt-0">
-              <div className="flex flex-col items-center justify-center h-10 sm:h-14 md:h-24">
-                <div className="text-xl sm:text-2xl md:text-3xl font-bold">{reminders.filter((r) => !r.completed).length}</div>
-                <p className="text-xs text-muted-foreground mt-1 text-center">pending</p>
+            <CardContent className="px-4 pb-4 pt-0">
+              <div className="flex flex-col items-center justify-center">
+                <div className="relative">
+                  <div className="text-3xl font-bold text-amber-700 dark:text-amber-300">{pendingReminders}</div>
+                  {pendingReminders > 0 && (
+                    <div className="absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground mt-1 text-center">
+                  pending reminders
+                </p>
+                {pendingReminders === 0 && (
+                  <Badge variant="outline" className="text-xs mt-2">All caught up!</Badge>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        )
+
+      case 'notes':
+        const recentNotes = notes.filter(note => {
+          const daysSinceUpdate = differenceInDays(new Date(), parseISO(note.updated_at))
+          return daysSinceUpdate <= 7
+        }).length
+
+        return (
+          <Card className="overflow-hidden border-0 shadow-sm bg-gradient-to-br from-indigo-50 to-indigo-100/50 dark:from-indigo-950/30 dark:to-indigo-900/20">
+            <CardHeader className="pb-2 px-4 py-3">
+              <CardTitle className="text-sm font-medium flex items-center gap-2">
+                <div className="p-1.5 rounded-lg bg-indigo-500/10">
+                  <IconComponent className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
+                </div>
+                {card.title}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="px-4 pb-4 pt-0">
+              <div className="flex flex-col items-center justify-center">
+                <div className="text-3xl font-bold text-indigo-700 dark:text-indigo-300">{recentNotes}</div>
+                <p className="text-xs text-muted-foreground mt-1 text-center">
+                  notes this week
+                </p>
+                <p className="text-xs text-muted-foreground/70 mt-0.5">
+                  {notes.length} total
+                </p>
               </div>
             </CardContent>
           </Card>
         )
         
-        case 'habitChart':
-  // Date range based on selected timeframe
-  const startDate = new Date();
-  switch (timeframe) {
-    case 'daily':
-      startDate.setDate(startDate.getDate() - 7); // Last week
-      break;
-    case 'weekly':
-      startDate.setDate(startDate.getDate() - 30); // Last month
-      break;
-    case 'monthly':
-      startDate.setDate(startDate.getDate() - 90); // Last 3 months
-      break;
-    default:
-      startDate.setDate(startDate.getDate() - 30);
-  }
-  
-  const startDateStr = startDate.toISOString().split('T')[0];
-  
-  // Initialize data structure for day of week analysis
-  const habitsByDay: { [key: string]: { total: number; completed: number } } = {
-    "Mon": { total: 0, completed: 0 },
-    "Tue": { total: 0, completed: 0 },
-    "Wed": { total: 0, completed: 0 },
-    "Thu": { total: 0, completed: 0 },
-    "Fri": { total: 0, completed: 0 },
-    "Sat": { total: 0, completed: 0 },
-    "Sun": { total: 0, completed: 0 },
-  };
-  
-  // Fill in the data
-  habits.forEach(habit => {
-    const filteredHistory = habit.history.filter(entry => entry.date >= startDateStr);
-    
-    filteredHistory.forEach(entry => {
-      // Get day of week for this entry
-      const date = new Date(entry.date);
-      const dayOfWeek = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][date.getDay()];
-      
-      // Only count if this habit is scheduled for this day
-      if (habit.frequency.includes(dayOfWeek)) {
-        habitsByDay[dayOfWeek].total += 1;
-        if (entry.completed) {
-          habitsByDay[dayOfWeek].completed += 1;
+      case 'habitChart':
+        // Get date range based on timeframe
+        const getDateRange = () => {
+          const now = new Date()
+          switch (timeframe) {
+            case 'daily':
+              return { start: subDays(now, 7), end: now, label: 'Last 7 days' }
+            case 'weekly':
+              return { start: subWeeks(now, 4), end: now, label: 'Last 4 weeks' }
+            case 'monthly':
+              return { start: subMonths(now, 3), end: now, label: 'Last 3 months' }
+            default:
+              return { start: subDays(now, 7), end: now, label: 'Last 7 days' }
+          }
         }
-      }
-    });
-  });
-  
-  // Convert to percentage completion rates
-  const completionData = Object.entries(habitsByDay).map(([day, data]) => ({
-    day,
-    rate: data.total > 0 ? Math.round((data.completed / data.total) * 100) : 0,
-    completed: data.completed,
-    total: data.total
-  }));
-  
-  // Sort by days of week in correct order
-  const orderedDays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-  completionData.sort((a, b) => orderedDays.indexOf(a.day) - orderedDays.indexOf(b.day));
 
-  // Title suffix based on timeframe
-  let titleSuffix = "";
-  switch (timeframe) {
-    case 'daily':
-      titleSuffix = "Last 7 days";
-      break;
-    case 'weekly':
-      titleSuffix = "Last 30 days";
-      break;
-    case 'monthly':
-      titleSuffix = "Last 3 months";
-      break;
-  }
+        const { start: startDate, end: endDate, label: periodLabel } = getDateRange()
 
-  return (
-    <Card >
-      {/* Similar card structure as before, but with titleSuffix added to the description */}
-      <CardHeader className="pb-2 px-4 py-3">
-        <CardTitle className="text-base sm:text-lg font-medium flex items-center gap-2">
-          <IconComponent className="h-4 w-4 sm:h-5 sm:w-5 text-primary" />
-          {card.title}
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="px-4 py-3">
-        {habits.length === 0 ? (
-          <div className="aspect-square sm:aspect-[4/3] bg-muted/30 rounded-md flex flex-col items-center justify-center p-4 sm:p-6">
-            <TrendingUp className="h-8 w-8 sm:h-12 sm:w-12 text-muted-foreground/40 mb-3" />
-            <p className="text-sm text-muted-foreground text-center">
-              Add some habits to see your completion data
-            </p>
-          </div>
-        ) : (
-          <div className="h-64">
-            <div className="flex items-end h-48 gap-1 mt-4">
-              {completionData.map((item) => (
-                <div key={item.day} className="flex-1 flex flex-col items-center">
-                  <div 
-                    className="w-full bg-blue-500/20 dark:bg-blue-500/10 rounded-t-sm relative group"
-                    style={{ 
-                      height: `${Math.max(4, item.rate)}%`,
-                      minHeight: item.total > 0 ? '4px' : '0'
-                    }}
-                  >
-                    {item.total > 0 && (
-                      <div className="absolute inset-0 bg-blue-500 rounded-t-sm opacity-80" 
-                        style={{ height: `${item.rate}%` }} 
-                      />
-                    )}
-                    <div className="hidden group-hover:block absolute -top-10 left-1/2 -translate-x-1/2 bg-black/80 text-white text-xs px-2 py-1 rounded whitespace-nowrap">
-                      {item.completed}/{item.total} completed ({item.rate}%)
-                    </div>
-                  </div>
-                  <div className="text-xs font-medium mt-2">{item.day}</div>
+        // Calculate completion rates by day of week
+        const habitsByDay: { [key: string]: { total: number; completed: number } } = {
+          "Mon": { total: 0, completed: 0 },
+          "Tue": { total: 0, completed: 0 },
+          "Wed": { total: 0, completed: 0 },
+          "Thu": { total: 0, completed: 0 },
+          "Fri": { total: 0, completed: 0 },
+          "Sat": { total: 0, completed: 0 },
+          "Sun": { total: 0, completed: 0 },
+        }
+
+        habits.forEach(habit => {
+          const metadata = parseHabitMetadata(habit.description)
+          
+          habit.habit_completions.forEach(completion => {
+            const completionDate = parseISO(completion.completed_at)
+            
+            if (isWithinInterval(completionDate, { start: startDate, end: endDate })) {
+              const dayOfWeek = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][completionDate.getDay()]
+              
+              // Check if habit was scheduled for this day
+              if (metadata.frequency_days.length === 0 || metadata.frequency_days.includes(dayOfWeek)) {
+                habitsByDay[dayOfWeek].total += 1
+                habitsByDay[dayOfWeek].completed += 1
+              }
+            }
+          })
+        })
+
+        const chartData = Object.entries(habitsByDay).map(([day, data]) => ({
+          day,
+          rate: data.total > 0 ? Math.round((data.completed / data.total) * 100) : 0,
+          completed: data.completed,
+          total: data.total
+        }))
+
+        const orderedDays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+        chartData.sort((a, b) => orderedDays.indexOf(a.day) - orderedDays.indexOf(b.day))
+
+        return (
+          <Card className="overflow-hidden border-0 shadow-sm">
+            <CardHeader className="pb-3 px-4 py-4">
+              <CardTitle className="text-base font-medium flex items-center gap-2">
+                <div className="p-1.5 rounded-lg bg-primary/10">
+                  <IconComponent className="h-4 w-4 text-primary" />
                 </div>
-              ))}
-            </div>
-            <div className="mt-4 text-xs text-center text-muted-foreground">
-              Habit completion by day of week • {titleSuffix}
-            </div>
-          </div>
-        )}
-      </CardContent>
-    </Card>
-  )
-          case 'taskChart':
-            // Calculate task statistics
-            const completedTasks = todos.filter(todo => todo.completed).length;
-            const pendingTasks = todos.filter(todo => !todo.completed).length;
-            const totalTasks = todos.length;
-            
-            // Calculate percentages for visualization
-            const completedPercentage = totalTasks > 0 ? (completedTasks / totalTasks) * 100 : 0;
-            const pendingPercentage = totalTasks > 0 ? (pendingTasks / totalTasks) * 100 : 0;
-            
-            return (
-              <Card className="overflow-hidden border-t-5 border-b-10  border-t-green-500">
-                <CardHeader className="pb-2 px-4 py-3">
-                  <CardTitle className="text-base sm:text-lg font-medium flex items-center gap-2">
-                    <IconComponent className="h-4 w-4 sm:h-5 sm:w-5 text-primary" />
-                    {card.title}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="px-4 py-3">
-                  {todos.length === 0 ? (
-                    <div className="aspect-square sm:aspect-[4/3] bg-muted/30 rounded-md flex flex-col items-center justify-center p-4 sm:p-6">
-                      <Award className="h-8 w-8 sm:h-12 sm:w-12 text-muted-foreground/40 mb-3" />
-                      <p className="text-sm text-muted-foreground text-center">
-                        Add some tasks to see your task distribution
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="h-64 flex flex-col justify-center">
-                      {/* Simple donut chart implementation */}
-                      <div className="relative mx-auto w-36 h-36 sm:w-40 sm:h-40">
-                        {/* Base circle */}
-                        <div className="absolute inset-0 rounded-full bg-muted"></div>
-                        
-                        {/* Only render segments if there are tasks */}
-                        {totalTasks > 0 && (
-                          <>
-                            {/* Completed segment */}
-                            {completedTasks > 0 && (
-                              <div className="absolute inset-0">
-                                <div 
-                                  className="w-full h-full rounded-full bg-green-500"
-                                  style={{
-                                    clipPath: `polygon(50% 50%, 50% 0, ${completedPercentage >= 50 
-                                      ? '100% 0, 100% 100%, 0 100%, 0 0, 50% 0'
-                                      : `${50 + completedPercentage}% 0`
-                                    })`
-                                  }}
-                                ></div>
-                              </div>
-                            )}
-                            
-                            {/* Pending segment */}
-                            {pendingTasks > 0 && (
-                              <div className="absolute inset-0">
-                                <div 
-                                  className="w-full h-full rounded-full bg-amber-500"
-                                  style={{
-                                    clipPath: `polygon(50% 50%, ${completedPercentage <= 50 
-                                      ? `${50 + completedPercentage}% 0` 
-                                      : '50% 0'
-                                    }, ${pendingPercentage >= 50 
-                                      ? '100% 0, 100% 100%, 0 100%, 0 0'
-                                      : `100% 0, 100% ${pendingPercentage * 3.6}%`
-                                    })`
-                                  }}
-                                ></div>
-                              </div>
-                            )}
-                          </>
-                        )}
-                        
-                        {/* Inner circle for donut effect */}
-                        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-24 h-24 sm:w-28 sm:h-28 rounded-full bg-background flex items-center justify-center">
-                          <div className="text-center">
-                            <div className="text-2xl font-bold">{todoCompletionRate}%</div>
-                            <div className="text-xs text-muted-foreground">Completed</div>
+                {card.title}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="px-4 py-3">
+              {habits.length === 0 ? (
+                <div className="h-48 bg-muted/30 rounded-lg flex flex-col items-center justify-center">
+                  <TrendingUp className="h-12 w-12 text-muted-foreground/40 mb-3" />
+                  <p className="text-sm text-muted-foreground text-center">
+                    Add some habits to see your trends
+                  </p>
+                </div>
+              ) : (
+                <div className="h-48">
+                  <div className="flex items-end h-32 gap-2 mt-4">
+                    {chartData.map((item) => (
+                      <div key={item.day} className="flex-1 flex flex-col items-center group">
+                        <div 
+                          className="w-full bg-primary/10 rounded-t-md relative transition-all duration-300 group-hover:bg-primary/20"
+                          style={{ 
+                            height: `${Math.max(8, item.rate * 0.8)}%`,
+                            minHeight: item.total > 0 ? '8px' : '0'
+                          }}
+                        >
+                          {item.total > 0 && (
+                            <div 
+                              className="absolute inset-0 bg-primary rounded-t-md transition-all duration-300" 
+                              style={{ height: `${item.rate}%` }} 
+                            />
+                          )}
+                          <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-black/80 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
+                            {item.rate}% ({item.completed}/{item.total})
                           </div>
                         </div>
+                        <div className="text-xs font-medium mt-2 text-muted-foreground">{item.day}</div>
                       </div>
-                      
-                      {/* Legend */}
-                      <div className="flex justify-center mt-6 gap-6">
-                        <div className="flex items-center">
-                          <div className="w-3 h-3 rounded-full bg-green-500 mr-2"></div>
-                          <span className="text-sm">{completedTasks} Completed</span>
-                        </div>
-                        <div className="flex items-center">
-                          <div className="w-3 h-3 rounded-full bg-amber-500 mr-2"></div>
-                          <span className="text-sm">{pendingTasks} Pending</span>
-                        </div>
+                    ))}
+                  </div>
+                  <div className="mt-6 text-xs text-center text-muted-foreground">
+                    Completion rates by day • {periodLabel}
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )
+
+      case 'taskChart':
+        const tasksByPriority = {
+          high: todos.filter(t => t.priority === 'high').length,
+          medium: todos.filter(t => t.priority === 'medium').length,
+          low: todos.filter(t => t.priority === 'low').length,
+          none: todos.filter(t => !t.priority || t.priority === null).length
+        }
+
+        const completedTasks = todos.filter(t => t.status === 'completed').length
+        const pendingTasks = todos.filter(t => t.status === 'pending').length
+        const totalTasks = todos.length
+
+        return (
+          <Card className="overflow-hidden border-0 shadow-sm">
+            <CardHeader className="pb-3 px-4 py-4">
+              <CardTitle className="text-base font-medium flex items-center gap-2">
+                <div className="p-1.5 rounded-lg bg-primary/10">
+                  <IconComponent className="h-4 w-4 text-primary" />
+                </div>
+                {card.title}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="px-4 py-3">
+              {todos.length === 0 ? (
+                <div className="h-48 bg-muted/30 rounded-lg flex flex-col items-center justify-center">
+                  <PieChart className="h-12 w-12 text-muted-foreground/40 mb-3" />
+                  <p className="text-sm text-muted-foreground text-center">
+                    Add some tasks to see your overview
+                  </p>
+                </div>
+              ) : (
+                <div className="h-48 space-y-4">
+                  {/* Progress overview */}
+                  <div className="text-center">
+                    <div className="text-2xl font-bold">{Math.round((completedTasks / totalTasks) * 100)}%</div>
+                    <div className="text-sm text-muted-foreground">Overall completion</div>
+                  </div>
+
+                  {/* Priority breakdown */}
+                  <div className="space-y-2">
+                    <div className="text-xs font-medium text-muted-foreground">By Priority</div>
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 bg-red-500 rounded-full"></div>
+                        <span>High: {tasksByPriority.high}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 bg-amber-500 rounded-full"></div>
+                        <span>Medium: {tasksByPriority.medium}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                        <span>Low: {tasksByPriority.low}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 bg-gray-400 rounded-full"></div>
+                        <span>None: {tasksByPriority.none}</span>
                       </div>
                     </div>
-                  )}
-                </CardContent>
-              </Card>
-            )
-        
+                  </div>
+
+                  {/* Status breakdown */}
+                  <div className="flex justify-between text-xs">
+                    <div className="flex items-center gap-1">
+                      <CheckSquare className="h-3 w-3 text-green-500" />
+                      <span>{completedTasks} completed</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <Clock className="h-3 w-3 text-amber-500" />
+                      <span>{pendingTasks} pending</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )
+
+      case 'activitySummary':
+        const todayCompletedHabits = completedTodaysHabits
+        const todayCompletedTasks = completedTodaysTodos
+        const recentNotesCount = notes.filter(note => {
+          const daysSinceUpdate = differenceInDays(new Date(), parseISO(note.updated_at))
+          return daysSinceUpdate <= 1
+        }).length
+
+        return (
+          <Card className="overflow-hidden border-0 shadow-sm">
+            <CardHeader className="pb-3 px-4 py-4">
+              <CardTitle className="text-base font-medium flex items-center gap-2">
+                <div className="p-1.5 rounded-lg bg-primary/10">
+                  <IconComponent className="h-4 w-4 text-primary" />
+                </div>
+                {card.title}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="px-4 py-3">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="text-center p-3 bg-gradient-to-br from-blue-50 to-blue-100/50 dark:from-blue-950/30 dark:to-blue-900/20 rounded-lg">
+                  <Target className="h-6 w-6 text-blue-600 mx-auto mb-2" />
+                  <div className="text-lg font-bold text-blue-700 dark:text-blue-300">{todayCompletedHabits}</div>
+                  <div className="text-xs text-muted-foreground">Habits completed</div>
+                </div>
+                
+                <div className="text-center p-3 bg-gradient-to-br from-green-50 to-green-100/50 dark:from-green-950/30 dark:to-green-900/20 rounded-lg">
+                  <CheckSquare className="h-6 w-6 text-green-600 mx-auto mb-2" />
+                  <div className="text-lg font-bold text-green-700 dark:text-green-300">{todayCompletedTasks}</div>
+                  <div className="text-xs text-muted-foreground">Tasks finished</div>
+                </div>
+                
+                <div className="text-center p-3 bg-gradient-to-br from-purple-50 to-purple-100/50 dark:from-purple-950/30 dark:to-purple-900/20 rounded-lg">
+                  <Edit className="h-6 w-6 text-purple-600 mx-auto mb-2" />
+                  <div className="text-lg font-bold text-purple-700 dark:text-purple-300">{recentNotesCount}</div>
+                  <div className="text-xs text-muted-foreground">Notes today</div>
+                </div>
+              </div>
+              
+              <div className="mt-4 pt-4 border-t text-center">
+                <div className="text-sm text-muted-foreground">
+                  {todayCompletedHabits + todayCompletedTasks > 5 ? 
+                    "🎉 Productive day! Keep it up!" : 
+                    todayCompletedHabits + todayCompletedTasks > 0 ?
+                    "👍 Good progress today!" :
+                    "✨ Ready to start your day?"
+                  }
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )
+
       default:
         return (
-          <Card>
+          <Card className="border-0 shadow-sm">
             <CardHeader>
               <CardTitle className="text-sm">Unknown Card Type</CardTitle>
             </CardHeader>
@@ -496,13 +728,13 @@ export default function Dashboard() {
   const getColumnSpanClass = (card: CardConfig) => {
     switch (card.size) {
       case 'small':
-        return 'col-span-2 sm:col-span-1 md:col-span-1'
+        return 'col-span-1'
       case 'medium':
-        return 'col-span-4 sm:col-span-2 md:col-span-2'
+        return 'col-span-2'
       case 'large':
-        return 'col-span-4 sm:col-span-4 md:col-span-4'
+        return 'col-span-4'
       default:
-        return 'col-span-2 sm:col-span-1 md:col-span-1'
+        return 'col-span-1'
     }
   }
 
@@ -511,19 +743,24 @@ export default function Dashboard() {
     .filter(card => card.enabled)
     .sort((a, b) => a.position - b.position)
 
-  // Separate small and large cards for layout
-  const smallCards = displayCards.filter(card => card.size === 'small')
-  const mediumLargeCards = displayCards.filter(card => card.size !== 'small')
-
   return (
     <div className="space-y-6 px-2 md:px-0">
       <motion.div
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.3 }}
-        className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 sm:gap-0"
+        className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4"
       >
-        <h2 className="text-2xl font-bold">Your Progress</h2>
+        <div className="flex items-center gap-3">
+          <div className="p-2 bg-gradient-to-br from-primary/10 to-primary/5 rounded-xl">
+            <BarChart className="h-6 w-6 text-primary" />
+          </div>
+          <div>
+            <h2 className="text-2xl font-bold">Dashboard</h2>
+            <p className="text-sm text-muted-foreground">Your productivity overview</p>
+          </div>
+        </div>
+        
         <div className="flex flex-wrap gap-2 items-center">
           <Tabs 
             value={timeframe} 
@@ -544,46 +781,48 @@ export default function Dashboard() {
             className="h-8"
           >
             <Settings className="h-4 w-4 mr-1" />
-            {isEditMode ? "Exit Edit Mode" : "Customize"}
+            {isEditMode ? "Done" : "Customize"}
           </Button>
         </div>
       </motion.div>
 
-      {isEditMode && (
-        <motion.div
-          initial={{ opacity: 0, height: 0 }}
-          animate={{ opacity: 1, height: "auto" }}
-          exit={{ opacity: 0, height: 0 }}
-          className="flex flex-wrap gap-2 justify-between items-center bg-muted/30 p-3 rounded-md"
-        >
-          <div className="flex gap-2 flex-wrap">
-            <Button size="sm" onClick={addCard} className="h-8">
-              <Plus className="h-4 w-4 mr-1" />
-              Add Card
-            </Button>
+      <AnimatePresence>
+        {isEditMode && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            className="flex flex-wrap gap-2 justify-between items-center bg-muted/30 p-4 rounded-xl border"
+          >
+            <div className="flex gap-2 flex-wrap">
+              <Button size="sm" onClick={addCard} className="h-8">
+                <Plus className="h-4 w-4 mr-1" />
+                Add Card
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={resetToDefaults}
+                className="h-8"
+              >
+                Reset Layout
+              </Button>
+            </div>
             <Button
               size="sm"
-              variant="outline"
-              onClick={resetToDefaults}
+              onClick={saveCardConfig}
               className="h-8"
             >
-              Reset Layout
+              <Save className="h-4 w-4 mr-1" />
+              Save Layout
             </Button>
-          </div>
-          <Button
-            size="sm"
-            onClick={saveCardConfig}
-            className="h-8"
-          >
-            <Save className="h-4 w-4 mr-1" />
-            Save Layout
-          </Button>
-        </motion.div>
-      )}
+          </motion.div>
+        )}
+      </AnimatePresence>
 
-      {/* Small cards section */}
-      <div className="grid grid-cols-4 gap-3">
-        {smallCards.map((card, index) => (
+      {/* Cards grid */}
+      <div className="grid grid-cols-4 gap-4">
+        {displayCards.map((card, index) => (
           <motion.div
             key={card.id}
             custom={index}
@@ -593,103 +832,44 @@ export default function Dashboard() {
             className={getColumnSpanClass(card)}
           >
             {isEditMode ? (
-              <div className="relative">
+              <div className="relative group">
                 {renderCardContent(card)}
-                <div className="absolute inset-0 bg-black/30 backdrop-blur-[1px] rounded-md flex items-center justify-center">
+                <div className="absolute inset-0 bg-black/20 backdrop-blur-[1px] rounded-lg flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
                   <div className="flex gap-1">
                     <Button
                       size="sm"
-                      variant="outline"
+                      variant="secondary"
                       onClick={() => {
                         setEditingCard(card)
                         setIsConfigOpen(true)
                       }}
-                      className="h-7 w-7 p-0 bg-white/90"
+                      className="h-8 w-8 p-0"
                     >
                       <Edit className="h-3 w-3" />
                     </Button>
                     <Button
                       size="sm"
-                      variant="outline"
+                      variant="secondary"
                       onClick={() => moveCardUp(index)}
-                      className="h-7 w-7 p-0 bg-white/90"
+                      disabled={index === 0}
+                      className="h-8 w-8 p-0"
                     >
-                      <Move className="h-3 w-3 rotate-180" />
+                      <ArrowUp className="h-3 w-3" />
                     </Button>
                     <Button
                       size="sm"
-                      variant="outline"
+                      variant="secondary"
                       onClick={() => moveCardDown(index)}
-                      className="h-7 w-7 p-0 bg-white/90"
+                      disabled={index === displayCards.length - 1}
+                      className="h-8 w-8 p-0"
                     >
-                      <Move className="h-3 w-3" />
+                      <ArrowDown className="h-3 w-3" />
                     </Button>
                     <Button
                       size="sm"
-                      variant="outline"
+                      variant="secondary"
                       onClick={() => deleteCard(card.id)}
-                      className="h-7 w-7 p-0 bg-white/90 text-red-500"
-                    >
-                      <Trash2 className="h-3 w-3" />
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            ) : (
-              renderCardContent(card)
-            )}
-          </motion.div>
-        ))}
-      </div>
-
-      {/* Medium and Large cards section */}
-      <div className="grid grid-cols-4 gap-3 mt-3">
-        {mediumLargeCards.map((card, index) => (
-          <motion.div
-            key={card.id}
-            custom={smallCards.length + index}
-            initial="hidden"
-            animate="visible"
-            variants={cardVariants}
-            className={getColumnSpanClass(card)}
-          >
-            {isEditMode ? (
-              <div className="relative">
-                {renderCardContent(card)}
-                <div className="absolute inset-0 bg-black/30 backdrop-blur-[1px] rounded-md flex items-center justify-center">
-                  <div className="flex gap-1">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => {
-                        setEditingCard(card)
-                        setIsConfigOpen(true)
-                      }}
-                      className="h-7 w-7 p-0 bg-white/90"
-                    >
-                      <Edit className="h-3 w-3" />
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => moveCardUp(index + smallCards.length)}
-                      className="h-7 w-7 p-0 bg-white/90"
-                    >
-                      <Move className="h-3 w-3 rotate-180" />
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => moveCardDown(index + smallCards.length)}
-                      className="h-7 w-7 p-0 bg-white/90"
-                    >
-                      <Move className="h-3 w-3" />
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => deleteCard(card.id)}
-                      className="h-7 w-7 p-0 bg-white/90 text-red-500"
+                      className="h-8 w-8 p-0 text-red-500 hover:text-red-600"
                     >
                       <Trash2 className="h-3 w-3" />
                     </Button>
@@ -739,8 +919,10 @@ export default function Dashboard() {
                     <SelectItem value="tasks">Tasks</SelectItem>
                     <SelectItem value="streak">Streak</SelectItem>
                     <SelectItem value="reminders">Reminders</SelectItem>
+                    <SelectItem value="notes">Notes</SelectItem>
                     <SelectItem value="habitChart">Habit Chart</SelectItem>
                     <SelectItem value="taskChart">Task Chart</SelectItem>
+                    <SelectItem value="activitySummary">Activity Summary</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -765,6 +947,9 @@ export default function Dashboard() {
                     <SelectItem value="PieChart">PieChart</SelectItem>
                     <SelectItem value="TrendingUp">TrendingUp</SelectItem>
                     <SelectItem value="Award">Award</SelectItem>
+                    <SelectItem value="Activity">Activity</SelectItem>
+                    <SelectItem value="Sparkles">Sparkles</SelectItem>
+                    <SelectItem value="Trophy">Trophy</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -781,16 +966,16 @@ export default function Dashboard() {
                     <SelectValue placeholder="Select size" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="small">Small</SelectItem>
-                    <SelectItem value="medium">Medium</SelectItem>
-                    <SelectItem value="large">Full Width</SelectItem>
+                    <SelectItem value="small">Small (1 column)</SelectItem>
+                    <SelectItem value="medium">Medium (2 columns)</SelectItem>
+                    <SelectItem value="large">Large (4 columns)</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
               
               <div className="grid grid-cols-4 items-center gap-4">
                 <Label htmlFor="cardEnabled" className="text-right">
-                  Enabled
+                  Visible
                 </Label>
                 <div className="col-span-3 flex items-center space-x-2">
                   <Switch
@@ -801,7 +986,7 @@ export default function Dashboard() {
                     }
                   />
                   <Label htmlFor="cardEnabled" className="text-sm font-normal">
-                    {editingCard.enabled ? "Visible" : "Hidden"}
+                    {editingCard.enabled ? "Show on dashboard" : "Hide from dashboard"}
                   </Label>
                 </div>
               </div>

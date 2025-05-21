@@ -15,139 +15,21 @@ import {
   CheckSquare,
   ArrowUp,
   ArrowDown,
-  Zap
+  Zap,
+  Loader2
 } from "lucide-react"
-import { getHabits, getTodos, getReminders, Habit, Todo, Reminder } from "@/lib/storage"
+import { useAuth } from '@/hooks/useAuth'
+import { getHabits, type HabitWithCompletions } from '@/lib/utils/database/habits'
+import { getTodos, type TodoWithRelations } from '@/lib/utils/database/todos'
+import { getReminders } from '@/lib/utils/database/reminders'
+import { Database } from '@/lib/types/database'
+import { format, addDays, addMonths, subMonths, addWeeks, subWeeks, subDays, startOfMonth, endOfMonth, startOfWeek, endOfWeek, isSameMonth, isSameDay, eachDayOfInterval, isWithinInterval } from 'date-fns'
+import { toast } from 'sonner'
 
 // View types
 type CalendarView = "year" | "month" | "week" | "day"
 
-// Custom isSameMonth implementation
-const isSameMonth = (date1: Date, date2: Date): boolean => {
-    return date1.getFullYear() === date2.getFullYear() && 
-           date1.getMonth() === date2.getMonth();
-  };
-  
-  // Custom isSameDay implementation
-  const isSameDay = (date1: Date, date2: Date): boolean => {
-    return date1.getFullYear() === date2.getFullYear() && 
-           date1.getMonth() === date2.getMonth() &&
-           date1.getDate() === date2.getDate();
-  };
-  
-  // Custom eachDayOfInterval implementation
-  const eachDayOfInterval = ({ start, end }: { start: Date, end: Date }): Date[] => {
-    const days: Date[] = [];
-    const currentDate = new Date(start);
-    
-    while (currentDate <= end) {
-      days.push(new Date(currentDate));
-      currentDate.setDate(currentDate.getDate() + 1);
-    }
-    
-    return days;
-  };
-  
-  // Custom isWithinInterval implementation
-  const isWithinInterval = (date: Date, { start, end }: { start: Date, end: Date }): boolean => {
-    return date >= start && date <= end;
-  };
-  
-  // Custom parseISO implementation
-  const parseISO = (dateString: string): Date => {
-    return new Date(dateString);
-  };
-  
-  const formatDate = (date: Date, formatStr: string) => {
-    const padZero = (num: number, targetLength = 2) => num.toString().padStart(targetLength, '0');
-  
-    const day = date.getDate();
-    const dayOfWeek = date.getDay();
-    const month = date.getMonth();
-    const year = date.getFullYear();
-    const hours24 = date.getHours();
-    const hours12 = hours24 % 12 || 12;
-    const minutes = date.getMinutes();
-    const seconds = date.getSeconds();
-  
-    const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-    const shortDayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-    const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
-    const shortMonthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-  
-    // Handle direct format cases first
-    switch (formatStr) {
-      case "h:mm A":
-        return `${hours12}:${padZero(minutes)} ${hours24 < 12 ? 'AM' : 'PM'}`;
-      case "h:mm A MMM d, yyyy":
-        return `${hours12}:${padZero(minutes)} ${hours24 < 12 ? 'AM' : 'PM'} ${shortMonthNames[month]} ${day}, ${year}`;
-      case "MMMM d, yyyy":
-        return `${monthNames[month]} ${day}, ${year}`;
-      case "MMMM yyyy":
-        return `${monthNames[month]} ${year}`;
-      case "MMMM":
-        return monthNames[month];
-      case "MMM d, yyyy":
-        return `${shortMonthNames[month]} ${day}, ${year}`;
-      case "MMM d":
-        return `${shortMonthNames[month]} ${day}`;
-      case "PP":
-        return `${monthNames[month]} ${day}, ${year}`;
-      case "PPP":
-        return `${dayNames[dayOfWeek]}, ${monthNames[month]} ${day}, ${year}`;
-      case "EEEE, MMMM d, yyyy":
-        return `${dayNames[dayOfWeek]}, ${monthNames[month]} ${day}, ${year}`;
-      case "yyyy-MM-dd":
-        return `${year}-${padZero(month + 1)}-${padZero(day)}`;
-      case "EEE":
-        return shortDayNames[dayOfWeek];
-      case "d":
-        return day.toString();
-      case "Today":
-        return "Today";
-    }
-  
-    // Custom format replacements
-    let result = formatStr;
-  
-    // Replace larger patterns first to avoid conflicts
-    result = result
-      .replace(/yyyy/g, year.toString()) 
-      .replace(/yy/g, year.toString().slice(-2))
-      .replace(/MMMM/g, monthNames[month])
-      .replace(/MMM/g, shortMonthNames[month])
-      .replace(/MM/g, padZero(month + 1))
-      .replace(/M(?![a-zA-Z])/g, (month + 1).toString())
-      .replace(/dd/g, padZero(day))
-      .replace(/d(?![a-zA-Z])/g, day.toString())
-      .replace(/EEEE/g, dayNames[dayOfWeek])
-      .replace(/EEE/g, shortDayNames[dayOfWeek])
-      .replace(/EE/g, shortDayNames[dayOfWeek])
-      .replace(/E/g, shortDayNames[dayOfWeek])
-      .replace(/HH/g, padZero(hours24))
-      .replace(/H/g, hours24.toString())
-      .replace(/hh/g, padZero(hours12))
-      .replace(/h(?![a-zA-Z])/g, hours12.toString())
-      .replace(/mm/g, padZero(minutes))
-      .replace(/m(?![a-zA-Z])/g, minutes.toString())
-      .replace(/ss/g, padZero(seconds))
-      .replace(/s(?![a-zA-Z])/g, seconds.toString())
-      .replace(/a/g, hours24 < 12 ? 'am' : 'pm')
-      .replace(/A/g, hours24 < 12 ? 'AM' : 'PM')
-      .replace(/do/g, (() => {
-        const suffixes = ['th', 'st', 'nd', 'rd'];
-        const mod = day % 100;
-        return day + (suffixes[(mod - 20) % 10] || suffixes[mod] || suffixes[0]);
-      })());
-  
-    return result;
-  };
-  
-  // Example Usage:
-  console.log(formatDate(new Date(), "EEEE, MMMM d, yyyy"));
-  console.log(formatDate(new Date(), "yyyy-MM-dd"));
-  console.log(formatDate(new Date(), "h:mm A"));
-  
+type Reminder = Database['public']['Tables']['reminders']['Row']
 
 // Day info type to store combined data for the calendar
 type DayInfo = {
@@ -185,60 +67,41 @@ type DayInfo = {
   hasItems: boolean;
 }
 
-// Custom date utility functions
-const addDaysToDate = (date: Date, days: number): Date => {
-    const result = new Date(date);
-    result.setDate(result.getDate() + days);
-    return result;
-  };
+// Helper function to parse habit metadata
+const parseHabitMetadata = (description: string | null) => {
+  if (!description) return { type: 'builder', frequency_days: [] }
   
-  const addMonthsToDate = (date: Date, months: number): Date => {
-    const result = new Date(date);
-    result.setMonth(result.getMonth() + months);
-    return result;
-  };
+  try {
+    const parsed = JSON.parse(description)
+    return {
+      type: parsed.type || 'builder',
+      frequency_days: parsed.frequency_days || []
+    }
+  } catch {
+    return { type: 'builder', frequency_days: [] }
+  }
+}
+
+// Helper function to check if habit is completed on date
+const isHabitCompletedOnDate = (habit: HabitWithCompletions, date: Date): boolean => {
+  const dateStr = format(date, 'yyyy-MM-dd')
+  return habit.habit_completions.some(completion => 
+    completion.completed_at.split('T')[0] === dateStr
+  )
+}
+
+// Helper function to check if habit is due on date
+const isHabitDueOnDate = (habit: HabitWithCompletions, date: Date): boolean => {
+  const metadata = parseHabitMetadata(habit.description)
+  if (metadata.frequency_days.length === 0) return true // Daily habit
   
-  const subMonthsFromDate = (date: Date, months: number): Date => {
-    const result = new Date(date);
-    result.setMonth(result.getMonth() - months);
-    return result;
-  };
-  
-  const addWeeksToDate = (date: Date, weeks: number): Date => {
-    return addDaysToDate(date, weeks * 7);
-  };
-  
-  const subWeeksFromDate = (date: Date, weeks: number): Date => {
-    return addDaysToDate(date, weeks * -7);
-  };
-  
-  const subDaysFromDate = (date: Date, days: number): Date => {
-    return addDaysToDate(date, -days);
-  };
-  
-  const startOfMonthDate = (date: Date): Date => {
-    return new Date(date.getFullYear(), date.getMonth(), 1);
-  };
-  
-  const endOfMonthDate = (date: Date): Date => {
-    return new Date(date.getFullYear(), date.getMonth() + 1, 0);
-  };
-  
-  const startOfWeekDate = (date: Date): Date => {
-    const result = new Date(date);
-    const day = result.getDay();
-    result.setDate(result.getDate() - day);
-    return result;
-  };
-  
-  const endOfWeekDate = (date: Date): Date => {
-    const result = new Date(date);
-    const day = result.getDay();
-    result.setDate(result.getDate() + (6 - day));
-    return result;
-  };
+  const dayOfWeek = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][date.getDay()]
+  return metadata.frequency_days.includes(dayOfWeek)
+}
 
 export default function Calendar() {
+  const { user } = useAuth()
+  
   // State for calendar view and date
   const [view, setView] = useState<CalendarView>("month")
   const [currentDate, setCurrentDate] = useState(new Date())
@@ -246,27 +109,47 @@ export default function Calendar() {
   const [calendarDays, setCalendarDays] = useState<DayInfo[]>([])
   
   // Data state
-  const [habits, setHabits] = useState<Habit[]>([])
-  const [todos, setTodos] = useState<Todo[]>([])
+  const [habits, setHabits] = useState<HabitWithCompletions[]>([])
+  const [todos, setTodos] = useState<TodoWithRelations[]>([])
   const [reminders, setReminders] = useState<Reminder[]>([])
-  const [mounted, setMounted] = useState(false)
+  const [loading, setLoading] = useState(true)
   
   // Load data on component mount
   useEffect(() => {
-    setMounted(true)
-    setHabits(getHabits())
-    setTodos(getTodos())
-    setReminders(getReminders())
-  }, [])
+    if (!user) return
+    
+    initializeData()
+  }, [user])
   
   // Generate calendar days whenever the date, view, or data changes
   useEffect(() => {
-    if (!mounted) return
+    if (!user || loading) return
     
     generateCalendarDays()
-  }, [currentDate, view, habits, todos, reminders, mounted])
-  
-  if (!mounted) return null
+  }, [currentDate, view, habits, todos, reminders, user, loading])
+
+  const initializeData = async () => {
+    if (!user) return
+    
+    try {
+      setLoading(true)
+      
+      const [habitsData, todosData, remindersData] = await Promise.all([
+        getHabits(user.id),
+        getTodos(user.id),
+        getReminders(user.id)
+      ])
+      
+      setHabits(habitsData)
+      setTodos(todosData)
+      setReminders(remindersData)
+    } catch (error) {
+      console.error('Error loading calendar data:', error)
+      toast.error('Failed to load calendar data')
+    } finally {
+      setLoading(false)
+    }
+  }
   
   // Generate days for the calendar based on current view
   function generateCalendarDays() {
@@ -284,13 +167,13 @@ export default function Calendar() {
         break
       case "month":
         // For month view, we'll show the entire month with padding for weeks
-        start = startOfWeekDate(startOfMonthDate(currentDate))
-        end = endOfWeekDate(endOfMonthDate(currentDate))
+        start = startOfWeek(startOfMonth(currentDate))
+        end = endOfWeek(endOfMonth(currentDate))
         break
       case "week":
         // For week view, we'll show the current week
-        start = startOfWeekDate(currentDate)
-        end = endOfWeekDate(currentDate)
+        start = startOfWeek(currentDate)
+        end = endOfWeek(currentDate)
         break
       case "day":
         // For day view, we'll show just the selected day
@@ -298,8 +181,8 @@ export default function Calendar() {
         end = currentDate
         break
       default:
-        start = startOfWeekDate(startOfMonthDate(currentDate))
-        end = endOfWeekDate(endOfMonthDate(currentDate))
+        start = startOfWeek(startOfMonth(currentDate))
+        end = endOfWeek(endOfMonth(currentDate))
     }
     
     // Generate array of days in the range
@@ -307,55 +190,57 @@ export default function Calendar() {
     
     // Map each day to include relevant data
     const days: DayInfo[] = daysInRange.map(date => {
-      const dateStr = formatDate(date, "yyyy-MM-dd")
+      const dateStr = format(date, "yyyy-MM-dd")
       const isCurrentMonth = isSameMonth(date, currentDate)
       const isToday = isSameDay(date, new Date())
       
       // Filter habits for this day
-      const dayHabits = habits.filter(habit => {
-        const dayOfWeek = formatDate(date, "EEE")
-        const formattedDayOfWeek = dayOfWeek === "Sun" ? "Sun" : 
-                                   dayOfWeek === "Mon" ? "Mon" : 
-                                   dayOfWeek === "Tue" ? "Tue" : 
-                                   dayOfWeek === "Wed" ? "Wed" : 
-                                   dayOfWeek === "Thu" ? "Thu" : 
-                                   dayOfWeek === "Fri" ? "Fri" : "Sat"
-        
-        // Only include habits that were scheduled for this day
-        return habit.frequency.includes(formattedDayOfWeek)
-      })
+      const dayHabits = habits.filter(habit => isHabitDueOnDate(habit, date))
       
       // Get habit completion status for this day
-      const completedHabits = dayHabits.filter(habit => 
-        habit.history.some(entry => entry.date === dateStr && entry.completed)
-      )
+      const completedHabits = dayHabits.filter(habit => isHabitCompletedOnDate(habit, date))
       
-      // Filter todos and reminders relevant to this day
+      // Filter todos relevant to this day (by creation date or due date)
       const dayTodos = todos.filter(todo => {
-        // For todos, we're showing ones created on this date
-        // In a real app, you might have a due date property to use instead
-        const todoDate = parseISO(todo.createdAt.split('T')[0])
+        // Check if todo was created on this date
+        const todoDate = new Date(todo.created_at)
         return isSameDay(todoDate, date)
       })
       
+      // Filter reminders for this specific date
       const dayReminders = reminders.filter(reminder => {
-        // For reminders, use the specific date field
-        return reminder.date === dateStr
+        const reminderDate = new Date(reminder.reminder_time)
+        return isSameDay(reminderDate, date)
       })
       
       // Format the data for habits
       const habitItems = dayHabits.map(habit => {
-        const completed = habit.history.some(entry => entry.date === dateStr && entry.completed)
+        const metadata = parseHabitMetadata(habit.description)
+        const completed = isHabitCompletedOnDate(habit, date)
         return {
           id: habit.id,
-          name: habit.name,
-          type: habit.type,
+          name: habit.title,
+          type: metadata.type as "builder" | "quitter",
           completed
         }
       })
       
+      // Format todos data
+      const todoItems = dayTodos.map(todo => ({
+        id: todo.id,
+        text: todo.title,
+        completed: todo.status === 'completed'
+      }))
+      
+      // Format reminders data
+      const reminderItems = dayReminders.map(reminder => ({
+        id: reminder.id,
+        text: reminder.title,
+        completed: reminder.status === 'completed'
+      }))
+      
       // Determine if this day has any items
-      const hasItems = habitItems.length > 0 || dayTodos.length > 0 || dayReminders.length > 0
+      const hasItems = habitItems.length > 0 || todoItems.length > 0 || reminderItems.length > 0
       
       return {
         date,
@@ -367,22 +252,14 @@ export default function Calendar() {
           items: habitItems
         },
         todos: {
-          completed: dayTodos.filter(todo => todo.completed).length,
-          total: dayTodos.length,
-          items: dayTodos.map(todo => ({
-            id: todo.id,
-            text: todo.text,
-            completed: todo.completed
-          }))
+          completed: todoItems.filter(todo => todo.completed).length,
+          total: todoItems.length,
+          items: todoItems
         },
         reminders: {
-          completed: dayReminders.filter(reminder => reminder.completed).length,
-          total: dayReminders.length,
-          items: dayReminders.map(reminder => ({
-            id: reminder.id,
-            text: reminder.text,
-            completed: reminder.completed
-          }))
+          completed: reminderItems.filter(reminder => reminder.completed).length,
+          total: reminderItems.length,
+          items: reminderItems
         },
         hasItems
       }
@@ -398,13 +275,13 @@ export default function Calendar() {
         setCurrentDate(date => new Date(date.getFullYear() - 1, date.getMonth(), 1))
         break
       case "month":
-        setCurrentDate(date => subMonthsFromDate(date, 1))
+        setCurrentDate(date => subMonths(date, 1))
         break
       case "week":
-        setCurrentDate(date => subWeeksFromDate(date, 1))
+        setCurrentDate(date => subWeeks(date, 1))
         break
       case "day":
-        setCurrentDate(date => subDaysFromDate(date, 1))
+        setCurrentDate(date => subDays(date, 1))
         break
     }
   }
@@ -415,13 +292,13 @@ export default function Calendar() {
         setCurrentDate(date => new Date(date.getFullYear() + 1, date.getMonth(), 1))
         break
       case "month":
-        setCurrentDate(date => addMonthsToDate(date, 1))
+        setCurrentDate(date => addMonths(date, 1))
         break
       case "week":
-        setCurrentDate(date => addWeeksToDate(date, 1))
+        setCurrentDate(date => addWeeks(date, 1))
         break
       case "day":
-        setCurrentDate(date => addDaysToDate(date, 1))
+        setCurrentDate(date => addDays(date, 1))
         break
     }
   }
@@ -454,8 +331,8 @@ export default function Calendar() {
       <div className="grid grid-cols-3 md:grid-cols-4 gap-4">
         {months.map(month => {
           // Calculate completion stats for this month
-          const monthStart = startOfMonthDate(month)
-          const monthEnd = endOfMonthDate(month)
+          const monthStart = startOfMonth(month)
+          const monthEnd = endOfMonth(month)
           const daysInMonth = calendarDays.filter(day => 
             isWithinInterval(day.date, { start: monthStart, end: monthEnd })
           )
@@ -481,7 +358,7 @@ export default function Calendar() {
             >
               <CardHeader className="p-3 pb-0 border-b">
                 <CardTitle className="text-sm font-medium">
-                  {formatDate(month, "MMMM")}
+                  {format(month, "MMMM")}
                 </CardTitle>
               </CardHeader>
               <CardContent className="p-3">
@@ -554,7 +431,7 @@ export default function Calendar() {
             >
               {/* Date number */}
               <div className="text-xs font-medium">
-                {formatDate(day.date, "d")}
+                {format(day.date, "d")}
               </div>
               
               {/* Indicators */}
@@ -610,10 +487,10 @@ export default function Calendar() {
               className={`py-2 rounded-md ${day.isToday ? 'bg-primary text-primary-foreground' : ''}`}
             >
               <div className="text-xs font-medium">
-                {formatDate(day.date, "EEE")}
+                {format(day.date, "EEE")}
               </div>
               <div className="text-lg">
-                {formatDate(day.date, "d")}
+                {format(day.date, "d")}
               </div>
             </div>
           ))}
@@ -625,7 +502,7 @@ export default function Calendar() {
             <div 
               key={day.date.toISOString()}
               className={`
-                min-h-32 p-2 rounded-md border overflow-auto
+                min-h-32 p-2 rounded-md border overflow-auto cursor-pointer
                 ${day.isToday ? 'bg-primary/10 border-primary' : ''}
               `}
               onClick={() => handleDayClick(day.date)}
@@ -652,7 +529,7 @@ export default function Calendar() {
                           ) : (
                             <ArrowDown className="h-3 w-3 text-red-500" />
                           )}
-                          <span>{habit.name}</span>
+                          <span className="truncate">{habit.name}</span>
                         </div>
                       </div>
                     ))}
@@ -676,7 +553,7 @@ export default function Calendar() {
                           ${reminder.completed ? 'line-through text-muted-foreground bg-muted' : 'bg-amber-500/20 dark:bg-amber-500/10'}
                         `}
                       >
-                        {reminder.text}
+                        <span className="truncate">{reminder.text}</span>
                       </div>
                     ))}
                   </div>
@@ -699,7 +576,7 @@ export default function Calendar() {
                           ${todo.completed ? 'line-through text-muted-foreground bg-muted' : 'bg-green-500/20 dark:bg-green-500/10'}
                         `}
                       >
-                        {todo.text}
+                        <span className="truncate">{todo.text}</span>
                       </div>
                     ))}
                   </div>
@@ -732,7 +609,7 @@ export default function Calendar() {
         {/* Day header */}
         <div className="text-center">
           <h3 className="text-xl font-bold">
-            {formatDate(selectedDate, "EEEE, MMMM d, yyyy")}
+            {format(selectedDate, "EEEE, MMMM d, yyyy")}
           </h3>
         </div>
         
@@ -881,11 +758,27 @@ export default function Calendar() {
       </div>
     )
   }
+
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center py-20">
+        <div className="flex items-center gap-2">
+          <Loader2 className="h-6 w-6 animate-spin" />
+          <span>Loading calendar...</span>
+        </div>
+      </div>
+    )
+  }
   
   return (
     <div className="space-y-6">
       {/* Header with controls */}
-      <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
+      <motion.div 
+        className="flex flex-col sm:flex-row justify-between items-center gap-4"
+        initial={{ opacity: 0, y: -10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3 }}
+      >
         <div className="flex items-center gap-2">
           <CalendarIcon className="h-6 w-6 text-primary" />
           <h2 className="text-2xl font-bold">Calendar</h2>
@@ -924,10 +817,10 @@ export default function Calendar() {
           
           {/* Current period display */}
           <div className="font-medium text-sm min-w-24 text-center">
-            {view === "year" && formatDate(currentDate, "yyyy")}
-            {view === "month" && formatDate(currentDate, "MMMM yyyy")}
-            {view === "week" && `Week of ${formatDate(calendarDays[0]?.date || currentDate, "MMM d")}`}
-            {view === "day" && formatDate(currentDate, "MMMM d, yyyy")}
+            {view === "year" && format(currentDate, "yyyy")}
+            {view === "month" && format(currentDate, "MMMM yyyy")}
+            {view === "week" && `Week of ${format(calendarDays[0]?.date || currentDate, "MMM d")}`}
+            {view === "day" && format(currentDate, "MMMM d, yyyy")}
           </div>
           
           {/* View selector */}
@@ -963,15 +856,20 @@ export default function Calendar() {
             </TabsList>
           </Tabs>
         </div>
-      </div>
+      </motion.div>
       
       {/* Calendar content */}
-      <div className="mt-4">
+      <motion.div 
+        className="mt-4"
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.2 }}
+      >
         {view === "year" && renderYearView()}
         {view === "month" && renderMonthView()}
         {view === "week" && renderWeekView()}
         {view === "day" && renderDayView()}
-      </div>
+      </motion.div>
     </div>
   )
 }
