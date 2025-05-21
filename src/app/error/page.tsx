@@ -395,7 +395,7 @@ export default function ErrorPage({
               >
                 <div className="flex flex-col sm:flex-row items-center justify-between gap-4 text-center">
                   <p className="text-xs text-slate-500 dark:text-slate-400">
-                    Still having issues? We're here to help!
+                    Still having issues? We&apos;re here to help!
                   </p>
                   
                   <div className="flex gap-2">
@@ -432,7 +432,7 @@ export default function ErrorPage({
           transition={{ delay: 1 }}
           className="mt-6 text-center text-sm text-slate-600 dark:text-slate-400"
         >
-          Don't worry, these things happen! Our team is continuously working to improve your experience.
+          Don&apos;t worry, these things happen! Our team is continuously working to improve your experience.
         </motion.div>
       </motion.div>
     </div>
