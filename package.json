@@ -35,6 +35,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "date-fns": "^3.0.0",
+    "dayjs": "^1.11.13",
     "framer-motion": "^12.5.0",
     "lucide-react": "^0.482.0",
     "next": "^15.3.1",

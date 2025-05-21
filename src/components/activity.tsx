@@ -24,26 +24,25 @@ import { getTodos, type TodoWithRelations } from '@/lib/utils/database/todos'
 import { getReminders } from '@/lib/utils/database/reminders'
 import { getNotes } from '@/lib/utils/database/notes'
 import { Database } from '@/lib/types/database'
-import { 
-  format, 
-  isToday, 
-  isTomorrow, 
-  isPast, 
-  differenceInDays, 
-  addDays,
-  startOfDay,
-  endOfDay,
-  isWithinInterval,
-  parseISO
-} from 'date-fns'
+import dayjs from 'dayjs'
+import relativeTime from 'dayjs/plugin/relativeTime'
+import isToday from 'dayjs/plugin/isToday'
+import isTomorrow from 'dayjs/plugin/isTomorrow'
+import customParseFormat from 'dayjs/plugin/customParseFormat'
 import { toast } from 'sonner'
+
+// Initialize dayjs plugins
+dayjs.extend(relativeTime)
+dayjs.extend(isToday)
+dayjs.extend(isTomorrow)
+dayjs.extend(customParseFormat)
 
 // Define activity item interface
 interface ActivityItem {
   id: string;
   type: "habit" | "todo" | "reminder" | "note";
   title: string;
-  date: Date;
+  date: dayjs.Dayjs;
   isCompleted: boolean;
   category?: "builder" | "quitter"; // For habits
   urgency: "overdue" | "today" | "tomorrow" | "upcoming" | "future";
@@ -76,19 +75,19 @@ const parseHabitMetadata = (description: string | null) => {
 }
 
 // Helper function to check if habit is completed on date
-const isHabitCompletedOnDate = (habit: HabitWithCompletions, date: Date): boolean => {
-  const dateStr = format(date, 'yyyy-MM-dd')
+const isHabitCompletedOnDate = (habit: HabitWithCompletions, date: dayjs.Dayjs): boolean => {
+  const dateStr = date.format('YYYY-MM-DD')
   return habit.habit_completions.some(completion => 
     completion.completed_at.split('T')[0] === dateStr
   )
 }
 
 // Helper function to check if habit is due on date
-const isHabitDueOnDate = (habit: HabitWithCompletions, date: Date): boolean => {
+const isHabitDueOnDate = (habit: HabitWithCompletions, date: dayjs.Dayjs): boolean => {
   const metadata = parseHabitMetadata(habit.description)
   if (metadata.frequency_days.length === 0) return true // Daily habit
   
-  const dayOfWeek = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][date.getDay()]
+  const dayOfWeek = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][date.day()]
   return metadata.frequency_days.includes(dayOfWeek)
 }
 
@@ -143,7 +142,12 @@ export default function ActivityStream() {
       setNotes(notesData.filter(note => !note.is_archived))
       
       // Process all data into activities
-      processActivities(habitsData, todosData, remindersData, notesData)
+      processActivities(
+        habitsData,
+        todosData.filter(todo => todo.status !== 'archived'),
+        remindersData.filter(reminder => reminder.status !== 'dismissed'),
+        notesData.filter(note => !note.is_archived)
+      )
       
     } catch (error) {
       console.error('Error loading activities:', error)
@@ -160,34 +164,34 @@ export default function ActivityStream() {
     reminderList: Reminder[],
     noteList: Note[]
   ) => {
-    const today = new Date()
+    const today = dayjs()
     const allActivities: ActivityItem[] = []
     
     // Process habits - look ahead 7 days
     habitList.forEach(habit => {
       for (let i = 0; i < 7; i++) {
-        const date = addDays(today, i)
+        const date = today.add(i, 'day')
         
         if (isHabitDueOnDate(habit, date)) {
           const completed = isHabitCompletedOnDate(habit, date)
           const metadata = parseHabitMetadata(habit.description)
           
           let urgency: "overdue" | "today" | "tomorrow" | "upcoming" | "future" = "upcoming"
-          if (isToday(date)) urgency = "today"
-          else if (isTomorrow(date)) urgency = "tomorrow" 
-          else if (isPast(date) && !completed) urgency = "overdue"
-          else if (differenceInDays(date, today) > 3) urgency = "future"
+          if (date.isToday()) urgency = "today"
+          else if (date.isTomorrow()) urgency = "tomorrow" 
+          else if (date.isBefore(today) && !completed) urgency = "overdue"
+          else if (date.diff(today, 'day') > 3) urgency = "future"
           
           allActivities.push({
-            id: `${habit.id}-${format(date, 'yyyy-MM-dd')}`,
+            id: `${habit.id}-${date.format('YYYY-MM-DD')}`,
             type: "habit",
             title: habit.title,
             date: date,
             isCompleted: completed,
             category: metadata.type as "builder" | "quitter",
             urgency,
-            daysUntil: differenceInDays(date, today),
-            description: habit.description
+            daysUntil: date.diff(today, 'day'),
+            description: habit.description || undefined
           })
         }
       }
@@ -196,13 +200,13 @@ export default function ActivityStream() {
     // Process todos
     todoList.forEach(todo => {
       // Use creation date as activity date (or due_date if available)
-      const date = todo.due_date ? parseISO(todo.due_date) : parseISO(todo.created_at)
+      const date = todo.due_date ? dayjs(todo.due_date) : dayjs(todo.created_at)
       
       let urgency: "overdue" | "today" | "tomorrow" | "upcoming" | "future" = "upcoming"
-      if (isToday(date)) urgency = "today"
-      else if (isTomorrow(date)) urgency = "tomorrow" 
-      else if (isPast(date) && todo.status === 'pending') urgency = "overdue"
-      else if (differenceInDays(date, today) > 3) urgency = "future"
+      if (date.isToday()) urgency = "today"
+      else if (date.isTomorrow()) urgency = "tomorrow" 
+      else if (date.isBefore(today) && todo.status === 'pending') urgency = "overdue"
+      else if (date.diff(today, 'day') > 3) urgency = "future"
       
       allActivities.push({
         id: todo.id,
@@ -211,7 +215,7 @@ export default function ActivityStream() {
         date,
         isCompleted: todo.status === 'completed',
         urgency,
-        daysUntil: differenceInDays(date, today),
+        daysUntil: date.diff(today, 'day'),
         description: todo.description || undefined,
         priority: todo.priority || undefined
       })
@@ -219,13 +223,13 @@ export default function ActivityStream() {
     
     // Process reminders
     reminderList.forEach(reminder => {
-      const date = parseISO(reminder.reminder_time)
+      const date = dayjs(reminder.reminder_time)
       
       let urgency: "overdue" | "today" | "tomorrow" | "upcoming" | "future" = "upcoming"
-      if (isToday(date)) urgency = "today"
-      else if (isTomorrow(date)) urgency = "tomorrow" 
-      else if (isPast(date) && reminder.status === 'pending') urgency = "overdue"
-      else if (differenceInDays(date, today) > 3) urgency = "future"
+      if (date.isToday()) urgency = "today"
+      else if (date.isTomorrow()) urgency = "tomorrow" 
+      else if (date.isBefore(today) && reminder.status === 'pending') urgency = "overdue"
+      else if (date.diff(today, 'day') > 3) urgency = "future"
       
       allActivities.push({
         id: reminder.id,
@@ -234,7 +238,7 @@ export default function ActivityStream() {
         date,
         isCompleted: reminder.status === 'completed',
         urgency,
-        daysUntil: differenceInDays(date, today),
+        daysUntil: date.diff(today, 'day'),
         description: reminder.description || undefined,
         priority: reminder.priority || undefined
       })
@@ -242,15 +246,15 @@ export default function ActivityStream() {
     
     // Process notes (recent ones only - last 7 days)
     noteList.forEach(note => {
-      const date = parseISO(note.updated_at)
-      const daysSinceUpdate = differenceInDays(today, date)
+      const date = dayjs(note.updated_at)
+      const daysSinceUpdate = today.diff(date, 'day')
       
       // Only show notes from the last 7 days
       if (daysSinceUpdate <= 7) {
         let urgency: "overdue" | "today" | "tomorrow" | "upcoming" | "future" = "upcoming"
-        if (isToday(date)) urgency = "today"
-        else if (isTomorrow(date)) urgency = "tomorrow" 
-        else if (differenceInDays(date, today) > 3) urgency = "future"
+        if (date.isToday()) urgency = "today"
+        else if (date.isTomorrow()) urgency = "tomorrow" 
+        else if (date.diff(today, 'day') > 3) urgency = "future"
         
         allActivities.push({
           id: note.id,
@@ -259,7 +263,7 @@ export default function ActivityStream() {
           date,
           isCompleted: false, // Notes don't have completion status
           urgency,
-          daysUntil: differenceInDays(date, today),
+          daysUntil: date.diff(today, 'day'),
           description: note.content || undefined,
           tags: note.tags || undefined
         })
@@ -281,7 +285,7 @@ export default function ActivityStream() {
       if (priorityDiff !== 0) return priorityDiff
       
       // Then sort by date
-      return a.date.getTime() - b.date.getTime()
+      return a.date.valueOf() - b.date.valueOf()
     })
     
     setActivities(allActivities)
@@ -325,15 +329,15 @@ export default function ActivityStream() {
   }
   
   // Format date for display
-  const formatActivityDate = (date: Date) => {
-    if (isToday(date)) {
-      return `Today, ${format(date, "h:mm a")}`
-    } else if (isTomorrow(date)) {
-      return `Tomorrow, ${format(date, "h:mm a")}`
-    } else if (differenceInDays(date, new Date()) < 7 && differenceInDays(date, new Date()) > -7) {
-      return format(date, "EEEE, h:mm a") // Day of week
+  const formatActivityDate = (date: dayjs.Dayjs) => {
+    if (date.isToday()) {
+      return `Today, ${date.format("h:mm A")}`
+    } else if (date.isTomorrow()) {
+      return `Tomorrow, ${date.format("h:mm A")}`
+    } else if (Math.abs(date.diff(dayjs(), 'day')) < 7) {
+      return date.format("dddd, h:mm A") // Day of week
     } else {
-      return format(date, "MMM d, yyyy")
+      return date.format("MMM D, YYYY")
     }
   }
   
