@@ -272,6 +272,12 @@ export type Database = {
           content: string | null
           color: string | null
           tags: string[] | null
+          note_type: 'text' | 'rich_text' | 'drawing' | 'checklist' | null
+          metadata: any | null
+          is_pinned: boolean
+          is_archived: boolean
+          word_count: number
+          character_count: number
           created_at: string
           updated_at: string
         }
@@ -282,6 +288,12 @@ export type Database = {
           content?: string | null
           color?: string | null
           tags?: string[] | null
+          note_type?: 'text' | 'rich_text' | 'drawing' | 'checklist' | null
+          metadata?: any | null
+          is_pinned?: boolean
+          is_archived?: boolean
+          word_count?: number
+          character_count?: number
           created_at?: string
           updated_at?: string
         }
@@ -292,6 +304,12 @@ export type Database = {
           content?: string | null
           color?: string | null
           tags?: string[] | null
+          note_type?: 'text' | 'rich_text' | 'drawing' | 'checklist' | null
+          metadata?: any | null
+          is_pinned?: boolean
+          is_archived?: boolean
+          word_count?: number
+          character_count?: number
           created_at?: string
           updated_at?: string
         }
