@@ -102,63 +102,8 @@ export default function ActivityStream() {
   const [searchQuery, setSearchQuery] = useState("")
   const [loading, setLoading] = useState(true)
   
-  // Data state
-  const [habits, setHabits] = useState<HabitWithCompletions[]>([])
-  const [todos, setTodos] = useState<TodoWithRelations[]>([])
-  const [reminders, setReminders] = useState<Reminder[]>([])
-  const [notes, setNotes] = useState<Note[]>([])
-  
-  // Load data on component mount
-  useEffect(() => {
-    if (!user) return
-    
-    loadActivities()
-  }, [user])
-  
-  // Apply filters whenever they change
-  useEffect(() => {
-    if (!loading) {
-      applyFilters()
-    }
-  }, [activities, activityFilter, timelineFilter, searchQuery, loading])
-  
-  // Load all activities from database
-  const loadActivities = async () => {
-    if (!user) return
-    
-    try {
-      setLoading(true)
-      
-      const [habitsData, todosData, remindersData, notesData] = await Promise.all([
-        getHabits(user.id),
-        getTodos(user.id),
-        getReminders(user.id),
-        getNotes(user.id)
-      ])
-      
-      setHabits(habitsData)
-      setTodos(todosData.filter(todo => todo.status !== 'archived')) // Only show active todos
-      setReminders(remindersData.filter(reminder => reminder.status !== 'dismissed'))
-      setNotes(notesData.filter(note => !note.is_archived))
-      
-      // Process all data into activities
-      processActivities(
-        habitsData,
-        todosData.filter(todo => todo.status !== 'archived'),
-        remindersData.filter(reminder => reminder.status !== 'dismissed'),
-        notesData.filter(note => !note.is_archived)
-      )
-      
-    } catch (error) {
-      console.error('Error loading activities:', error)
-      toast.error('Failed to load activities')
-    } finally {
-      setLoading(false)
-    }
-  }
-  
   // Process data into activity items
-  const processActivities = (
+  const processActivities = useCallback((
     habitList: HabitWithCompletions[], 
     todoList: TodoWithRelations[], 
     reminderList: Reminder[],
@@ -289,7 +234,44 @@ export default function ActivityStream() {
     })
     
     setActivities(allActivities)
-  }
+  }, [])
+  
+  // Load all activities from database
+  const loadActivities = useCallback(async () => {
+    if (!user) return
+    
+    try {
+      setLoading(true)
+      
+      const [habitsData, todosData, remindersData, notesData] = await Promise.all([
+        getHabits(user.id),
+        getTodos(user.id),
+        getReminders(user.id),
+        getNotes(user.id)
+      ])
+      
+      // Process all data into activities
+      processActivities(
+        habitsData,
+        todosData.filter(todo => todo.status !== 'archived'),
+        remindersData.filter(reminder => reminder.status !== 'dismissed'),
+        notesData.filter(note => !note.is_archived)
+      )
+      
+    } catch (error) {
+      console.error('Error loading activities:', error)
+      toast.error('Failed to load activities')
+    } finally {
+      setLoading(false)
+    }
+  }, [user, processActivities])
+  
+  // Load data on component mount
+  useEffect(() => {
+    if (!user) return
+    
+    loadActivities()
+  }, [user, loadActivities])
   
   // Apply filters to activities
   const applyFilters = useCallback(() => {
@@ -322,6 +304,13 @@ export default function ActivityStream() {
     
     setFilteredActivities(filtered)
   }, [activities, activityFilter, timelineFilter, searchQuery])
+  
+  // Apply filters whenever they change
+  useEffect(() => {
+    if (!loading) {
+      applyFilters()
+    }
+  }, [activities, activityFilter, timelineFilter, searchQuery, loading, applyFilters])
   
   // Handle search input
   const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
