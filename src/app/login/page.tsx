@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from 'react'
-import { motion, AnimatePresence } from "framer-motion"
+import { motion } from "framer-motion"
 import { login, signup } from './action'
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
@@ -52,7 +52,7 @@ export default function LoginPage() {
       toast.success('Welcome back!')
     } catch (error: unknown) {
       console.error('Login error:', error)
-      toast.error('Login failed. Please check your credentials.')
+      toast.error('Logging in...')
     } finally {
       setIsLoading(false)
     }
@@ -251,287 +251,281 @@ export default function LoginPage() {
                 </TabsList>
               </motion.div>
               
-              <AnimatePresence mode="wait">
-                {/* Login Form */}
-                <TabsContent value="login" className="mt-0">
-                  <motion.div
-                    key="login"
-                    initial={{ opacity: 0, x: 20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: -20 }}
-                    transition={{ duration: 0.3 }}
-                  >
-                    <Card className="border-0 shadow-2xl bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm border border-white/20 dark:border-slate-700/50">
-                      <CardHeader className="text-center space-y-2 pb-6">
-                        <CardTitle className="text-2xl font-bold bg-gradient-to-r from-slate-800 to-slate-600 dark:from-slate-200 dark:to-slate-400 bg-clip-text text-transparent">
-                          Welcome Back
-                        </CardTitle>
-                        <CardDescription className="text-slate-600 dark:text-slate-400">
-                          Sign in to continue to your account
-                        </CardDescription>
-                      </CardHeader>
-                      <form onSubmit={handleLogin}>
-                        <CardContent className="space-y-4">
-                          {/* Social Login Buttons */}
-                          <div className="space-y-3">
-                            <Button 
-                              type="button" 
-                              variant="outline" 
-                              className="w-full h-11 bg-white/50 hover:bg-white/80 dark:bg-slate-700/50 dark:hover:bg-slate-700/80 border border-slate-200/50 dark:border-slate-600/50"
-                              disabled
-                            >
-                              <Chrome className="w-4 h-4 mr-2" />
-                              Continue with Google
-                            </Button>
-                            <Button 
-                              type="button" 
-                              variant="outline" 
-                              className="w-full h-11 bg-white/50 hover:bg-white/80 dark:bg-slate-700/50 dark:hover:bg-slate-700/80 border border-slate-200/50 dark:border-slate-600/50"
-                              disabled
-                            >
-                              <Github className="w-4 h-4 mr-2" />
-                              Continue with GitHub
-                            </Button>
-                          </div>
-
-                          <div className="relative">
-                            <div className="absolute inset-0 flex items-center">
-                              <span className="w-full border-t border-slate-200 dark:border-slate-700" />
-                            </div>
-                            <div className="relative flex justify-center text-xs uppercase">
-                              <span className="bg-white dark:bg-slate-800 px-2 text-slate-500 dark:text-slate-400">
-                                Or continue with email
-                              </span>
-                            </div>
-                          </div>
-
-                          <div className="space-y-4">
-                            <div className="space-y-2">
-                              <Label htmlFor="login-email" className="text-slate-700 dark:text-slate-300 font-medium">
-                                Email address
-                              </Label>
-                              <div className="relative">
-                                <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 h-4 w-4" />
-                                <Input 
-                                  id="login-email" 
-                                  type="email" 
-                                  placeholder="Enter your email" 
-                                  value={email}
-                                  onChange={handleEmailChange}
-                                  className="pl-10 h-11 bg-white/50 dark:bg-slate-700/50 border-slate-200 dark:border-slate-600 focus:border-blue-500 dark:focus:border-blue-400 focus:ring-blue-500/20"
-                                  required 
-                                />
-                              </div>
-                            </div>
-                            <div className="space-y-2">
-                              <Label htmlFor="login-password" className="text-slate-700 dark:text-slate-300 font-medium">
-                                Password
-                              </Label>
-                              <div className="relative">
-                                <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 h-4 w-4" />
-                                <Input 
-                                  id="login-password" 
-                                  type={showPassword ? "text" : "password"}
-                                  placeholder="Enter your password"
-                                  value={password}
-                                  onChange={handlePasswordChange}
-                                  className="pl-10 pr-10 h-11 bg-white/50 dark:bg-slate-700/50 border-slate-200 dark:border-slate-600 focus:border-blue-500 dark:focus:border-blue-400 focus:ring-blue-500/20"
-                                  required 
-                                />
-                                <button
-                                  type="button"
-                                  onClick={() => setShowPassword(!showPassword)}
-                                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
-                                >
-                                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                                </button>
-                              </div>
-                            </div>
-                          </div>
-
-                          <div className="flex items-center justify-between text-sm">
-                            <div className="flex items-center space-x-2">
-                              <input 
-                                type="checkbox" 
-                                id="remember" 
-                                className="rounded border-slate-300 dark:border-slate-600"
-                              />
-                              <label htmlFor="remember" className="text-slate-600 dark:text-slate-400">
-                                Remember me
-                              </label>
-                            </div>
-                            <button 
-                              type="button" 
-                              className="text-blue-600 hover:text-blue-500 dark:text-blue-400 dark:hover:text-blue-300 font-medium"
-                            >
-                              Forgot password?
-                            </button>
-                          </div>
-                        </CardContent>
-                        <CardFooter className="pt-2">
+              {/* Login Form */}
+              <TabsContent value="login" className="mt-0">
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.3 }}
+                >
+                  <Card className="border-0 shadow-2xl bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm border border-white/20 dark:border-slate-700/50">
+                    <CardHeader className="text-center space-y-2 pb-6">
+                      <CardTitle className="text-2xl font-bold bg-gradient-to-r from-slate-800 to-slate-600 dark:from-slate-200 dark:to-slate-400 bg-clip-text text-transparent">
+                        Welcome Back
+                      </CardTitle>
+                      <CardDescription className="text-slate-600 dark:text-slate-400">
+                        Sign in to continue to your account
+                      </CardDescription>
+                    </CardHeader>
+                    <form onSubmit={handleLogin}>
+                      <CardContent className="space-y-4">
+                        {/* Social Login Buttons */}
+                        <div className="space-y-3">
                           <Button 
-                            type="submit" 
-                            className="w-full h-11 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white font-medium transition-all duration-200 shadow-lg hover:shadow-xl"
-                            disabled={isLoading}
+                            type="button" 
+                            variant="outline" 
+                            className="w-full h-11 bg-white/50 hover:bg-white/80 dark:bg-slate-700/50 dark:hover:bg-slate-700/80 border border-slate-200/50 dark:border-slate-600/50"
+                            disabled
                           >
-                            {isLoading ? (
-                              <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                            ) : (
-                              <ArrowRight className="h-4 w-4 mr-2" />
-                            )}
-                            {isLoading ? 'Signing in...' : 'Sign in'}
+                            <Chrome className="w-4 h-4 mr-2" />
+                            Continue with Google
                           </Button>
-                        </CardFooter>
-                      </form>
-                    </Card>
-                  </motion.div>
-                </TabsContent>
-                
-                {/* Signup Form */}
-                <TabsContent value="signup" className="mt-0">
-                  <motion.div
-                    key="signup"
-                    initial={{ opacity: 0, x: 20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: -20 }}
-                    transition={{ duration: 0.3 }}
-                  >
-                    <Card className="border-0 shadow-2xl bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm border border-white/20 dark:border-slate-700/50">
-                      <CardHeader className="text-center space-y-2 pb-6">
-                        <CardTitle className="text-2xl font-bold bg-gradient-to-r from-slate-800 to-slate-600 dark:from-slate-200 dark:to-slate-400 bg-clip-text text-transparent">
-                          Create Account
-                        </CardTitle>
-                        <CardDescription className="text-slate-600 dark:text-slate-400">
-                          Join thousands of productive users today
-                        </CardDescription>
-                      </CardHeader>
-                      <form onSubmit={handleSignup}>
-                        <CardContent className="space-y-4">
-                          {/* Social Signup Buttons */}
-                          <div className="space-y-3">
-                            <Button 
-                              type="button" 
-                              variant="outline" 
-                              className="w-full h-11 bg-white/50 hover:bg-white/80 dark:bg-slate-700/50 dark:hover:bg-slate-700/80 border border-slate-200/50 dark:border-slate-600/50"
-                              disabled
-                            >
-                              <Chrome className="w-4 h-4 mr-2" />
-                              Sign up with Google
-                            </Button>
-                            <Button 
-                              type="button" 
-                              variant="outline" 
-                              className="w-full h-11 bg-white/50 hover:bg-white/80 dark:bg-slate-700/50 dark:hover:bg-slate-700/80 border border-slate-200/50 dark:border-slate-600/50"
-                              disabled
-                            >
-                              <Github className="w-4 h-4 mr-2" />
-                              Sign up with GitHub
-                            </Button>
-                          </div>
+                          <Button 
+                            type="button" 
+                            variant="outline" 
+                            className="w-full h-11 bg-white/50 hover:bg-white/80 dark:bg-slate-700/50 dark:hover:bg-slate-700/80 border border-slate-200/50 dark:border-slate-600/50"
+                            disabled
+                          >
+                            <Github className="w-4 h-4 mr-2" />
+                            Continue with GitHub
+                          </Button>
+                        </div>
 
-                          <div className="relative">
-                            <div className="absolute inset-0 flex items-center">
-                              <span className="w-full border-t border-slate-200 dark:border-slate-700" />
-                            </div>
-                            <div className="relative flex justify-center text-xs uppercase">
-                              <span className="bg-white dark:bg-slate-800 px-2 text-slate-500 dark:text-slate-400">
-                                Or create with email
-                              </span>
+                        <div className="relative">
+                          <div className="absolute inset-0 flex items-center">
+                            <span className="w-full border-t border-slate-200 dark:border-slate-700" />
+                          </div>
+                          <div className="relative flex justify-center text-xs uppercase">
+                            <span className="bg-white dark:bg-slate-800 px-2 text-slate-500 dark:text-slate-400">
+                              Or continue with email
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="space-y-4">
+                          <div className="space-y-2">
+                            <Label htmlFor="login-email" className="text-slate-700 dark:text-slate-300 font-medium">
+                              Email address
+                            </Label>
+                            <div className="relative">
+                              <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 h-4 w-4" />
+                              <Input 
+                                id="login-email" 
+                                type="email" 
+                                placeholder="Enter your email" 
+                                value={email}
+                                onChange={handleEmailChange}
+                                className="pl-10 h-11 bg-white/50 dark:bg-slate-700/50 border-slate-200 dark:border-slate-600 focus:border-blue-500 dark:focus:border-blue-400 focus:ring-blue-500/20"
+                                required 
+                              />
                             </div>
                           </div>
-
-                          <div className="space-y-4">
-                            <div className="space-y-2">
-                              <Label htmlFor="signup-email" className="text-slate-700 dark:text-slate-300 font-medium">
-                                Email address
-                              </Label>
-                              <div className="relative">
-                                <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 h-4 w-4" />
-                                <Input 
-                                  id="signup-email" 
-                                  type="email" 
-                                  placeholder="Enter your email" 
-                                  value={email}
-                                  onChange={handleEmailChange}
-                                  className="pl-10 h-11 bg-white/50 dark:bg-slate-700/50 border-slate-200 dark:border-slate-600 focus:border-blue-500 dark:focus:border-blue-400 focus:ring-blue-500/20"
-                                  required 
-                                />
-                              </div>
-                            </div>
-                            <div className="space-y-2">
-                              <Label htmlFor="signup-password" className="text-slate-700 dark:text-slate-300 font-medium">
-                                Password
-                              </Label>
-                              <div className="relative">
-                                <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 h-4 w-4" />
-                                <Input 
-                                  id="signup-password" 
-                                  type={showPassword ? "text" : "password"}
-                                  placeholder="Create a strong password"
-                                  value={password}
-                                  onChange={handlePasswordChange}
-                                  className="pl-10 pr-10 h-11 bg-white/50 dark:bg-slate-700/50 border-slate-200 dark:border-slate-600 focus:border-blue-500 dark:focus:border-blue-400 focus:ring-blue-500/20"
-                                  required 
-                                />
-                                <button
-                                  type="button"
-                                  onClick={() => setShowPassword(!showPassword)}
-                                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
-                                >
-                                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                                </button>
-                              </div>
-                              {password && (
-                                <div className="space-y-1">
-                                  <div className="flex items-center gap-2 text-xs">
-                                    <CheckCircle className={`h-3 w-3 ${password.length >= 8 ? 'text-green-500' : 'text-slate-400'}`} />
-                                    <span className={password.length >= 8 ? 'text-green-600 dark:text-green-400' : 'text-slate-500'}>
-                                      At least 8 characters
-                                    </span>
-                                  </div>
-                                </div>
-                              )}
+                          <div className="space-y-2">
+                            <Label htmlFor="login-password" className="text-slate-700 dark:text-slate-300 font-medium">
+                              Password
+                            </Label>
+                            <div className="relative">
+                              <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 h-4 w-4" />
+                              <Input 
+                                id="login-password" 
+                                type={showPassword ? "text" : "password"}
+                                placeholder="Enter your password"
+                                value={password}
+                                onChange={handlePasswordChange}
+                                className="pl-10 pr-10 h-11 bg-white/50 dark:bg-slate-700/50 border-slate-200 dark:border-slate-600 focus:border-blue-500 dark:focus:border-blue-400 focus:ring-blue-500/20"
+                                required 
+                              />
+                              <button
+                                type="button"
+                                onClick={() => setShowPassword(!showPassword)}
+                                className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+                              >
+                                {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                              </button>
                             </div>
                           </div>
+                        </div>
 
-                          <div className="flex items-center space-x-2 text-sm">
+                        <div className="flex items-center justify-between text-sm">
+                          <div className="flex items-center space-x-2">
                             <input 
                               type="checkbox" 
-                              id="terms" 
+                              id="remember" 
                               className="rounded border-slate-300 dark:border-slate-600"
-                              required
                             />
-                            <label htmlFor="terms" className="text-slate-600 dark:text-slate-400">
-                              I agree to the{' '}
-                              <button type="button" className="text-blue-600 hover:text-blue-500 dark:text-blue-400 dark:hover:text-blue-300 font-medium">
-                                Terms of Service
-                              </button>{' '}
-                              and{' '}
-                              <button type="button" className="text-blue-600 hover:text-blue-500 dark:text-blue-400 dark:hover:text-blue-300 font-medium">
-                                Privacy Policy
-                              </button>
+                            <label htmlFor="remember" className="text-slate-600 dark:text-slate-400">
+                              Remember me
                             </label>
                           </div>
-                        </CardContent>
-                        <CardFooter className="pt-2">
-                          <Button 
-                            type="submit" 
-                            className="w-full h-11 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white font-medium transition-all duration-200 shadow-lg hover:shadow-xl"
-                            disabled={isLoading}
+                          <button 
+                            type="button" 
+                            className="text-blue-600 hover:text-blue-500 dark:text-blue-400 dark:hover:text-blue-300 font-medium"
                           >
-                            {isLoading ? (
-                              <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                            ) : (
-                              <Sparkles className="h-4 w-4 mr-2" />
-                            )}
-                            {isLoading ? 'Creating account...' : 'Create account'}
+                            Forgot password?
+                          </button>
+                        </div>
+                      </CardContent>
+                      <CardFooter className="pt-2">
+                        <Button 
+                          type="submit" 
+                          className="w-full h-11 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white font-medium transition-all duration-200 shadow-lg hover:shadow-xl"
+                          disabled={isLoading}
+                        >
+                          {isLoading ? (
+                            <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                          ) : (
+                            <ArrowRight className="h-4 w-4 mr-2" />
+                          )}
+                          {isLoading ? 'Signing in...' : 'Sign in'}
+                        </Button>
+                      </CardFooter>
+                    </form>
+                  </Card>
+                </motion.div>
+              </TabsContent>
+              
+              {/* Signup Form */}
+              <TabsContent value="signup" className="mt-0">
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.3 }}
+                >
+                  <Card className="border-0 shadow-2xl bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm border border-white/20 dark:border-slate-700/50">
+                    <CardHeader className="text-center space-y-2 pb-6">
+                      <CardTitle className="text-2xl font-bold bg-gradient-to-r from-slate-800 to-slate-600 dark:from-slate-200 dark:to-slate-400 bg-clip-text text-transparent">
+                        Create Account
+                      </CardTitle>
+                      <CardDescription className="text-slate-600 dark:text-slate-400">
+                        Join thousands of productive users today
+                      </CardDescription>
+                    </CardHeader>
+                    <form onSubmit={handleSignup}>
+                      <CardContent className="space-y-4">
+                        {/* Social Signup Buttons */}
+                        <div className="space-y-3">
+                          <Button 
+                            type="button" 
+                            variant="outline" 
+                            className="w-full h-11 bg-white/50 hover:bg-white/80 dark:bg-slate-700/50 dark:hover:bg-slate-700/80 border border-slate-200/50 dark:border-slate-600/50"
+                            disabled
+                          >
+                            <Chrome className="w-4 h-4 mr-2" />
+                            Sign up with Google
                           </Button>
-                        </CardFooter>
-                      </form>
-                    </Card>
-                  </motion.div>
-                </TabsContent>
-              </AnimatePresence>
+                          <Button 
+                            type="button" 
+                            variant="outline" 
+                            className="w-full h-11 bg-white/50 hover:bg-white/80 dark:bg-slate-700/50 dark:hover:bg-slate-700/80 border border-slate-200/50 dark:border-slate-600/50"
+                            disabled
+                          >
+                            <Github className="w-4 h-4 mr-2" />
+                            Sign up with GitHub
+                          </Button>
+                        </div>
+
+                        <div className="relative">
+                          <div className="absolute inset-0 flex items-center">
+                            <span className="w-full border-t border-slate-200 dark:border-slate-700" />
+                          </div>
+                          <div className="relative flex justify-center text-xs uppercase">
+                            <span className="bg-white dark:bg-slate-800 px-2 text-slate-500 dark:text-slate-400">
+                              Or create with email
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="space-y-4">
+                          <div className="space-y-2">
+                            <Label htmlFor="signup-email" className="text-slate-700 dark:text-slate-300 font-medium">
+                              Email address
+                            </Label>
+                            <div className="relative">
+                              <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 h-4 w-4" />
+                              <Input 
+                                id="signup-email" 
+                                type="email" 
+                                placeholder="Enter your email" 
+                                value={email}
+                                onChange={handleEmailChange}
+                                className="pl-10 h-11 bg-white/50 dark:bg-slate-700/50 border-slate-200 dark:border-slate-600 focus:border-blue-500 dark:focus:border-blue-400 focus:ring-blue-500/20"
+                                required 
+                              />
+                            </div>
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="signup-password" className="text-slate-700 dark:text-slate-300 font-medium">
+                              Password
+                            </Label>
+                            <div className="relative">
+                              <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 h-4 w-4" />
+                              <Input 
+                                id="signup-password" 
+                                type={showPassword ? "text" : "password"}
+                                placeholder="Create a strong password"
+                                value={password}
+                                onChange={handlePasswordChange}
+                                className="pl-10 pr-10 h-11 bg-white/50 dark:bg-slate-700/50 border-slate-200 dark:border-slate-600 focus:border-blue-500 dark:focus:border-blue-400 focus:ring-blue-500/20"
+                                required 
+                              />
+                              <button
+                                type="button"
+                                onClick={() => setShowPassword(!showPassword)}
+                                className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+                              >
+                                {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                              </button>
+                            </div>
+                            {password && (
+                              <div className="space-y-1">
+                                <div className="flex items-center gap-2 text-xs">
+                                  <CheckCircle className={`h-3 w-3 ${password.length >= 8 ? 'text-green-500' : 'text-slate-400'}`} />
+                                  <span className={password.length >= 8 ? 'text-green-600 dark:text-green-400' : 'text-slate-500'}>
+                                    At least 8 characters
+                                  </span>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="flex items-center space-x-2 text-sm">
+                          <input 
+                            type="checkbox" 
+                            id="terms" 
+                            className="rounded border-slate-300 dark:border-slate-600"
+                            required
+                          />
+                          <label htmlFor="terms" className="text-slate-600 dark:text-slate-400">
+                            I agree to the{' '}
+                            <button type="button" className="text-blue-600 hover:text-blue-500 dark:text-blue-400 dark:hover:text-blue-300 font-medium">
+                              Terms of Service
+                            </button>{' '}
+                            and{' '}
+                            <button type="button" className="text-blue-600 hover:text-blue-500 dark:text-blue-400 dark:hover:text-blue-300 font-medium">
+                              Privacy Policy
+                            </button>
+                          </label>
+                        </div>
+                      </CardContent>
+                      <CardFooter className="pt-2">
+                        <Button 
+                          type="submit" 
+                          className="w-full h-11 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white font-medium transition-all duration-200 shadow-lg hover:shadow-xl"
+                          disabled={isLoading}
+                        >
+                          {isLoading ? (
+                            <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                          ) : (
+                            <Sparkles className="h-4 w-4 mr-2" />
+                          )}
+                          {isLoading ? 'Creating account...' : 'Create account'}
+                        </Button>
+                      </CardFooter>
+                    </form>
+                  </Card>
+                </motion.div>
+              </TabsContent>
             </Tabs>
 
             {/* Mobile branding */}
