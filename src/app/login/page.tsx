@@ -8,7 +8,6 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Badge } from "@/components/ui/badge"
 import { 
   Mail, 
   Lock, 
@@ -51,7 +50,8 @@ export default function LoginPage() {
       formData.append('password', password)
       await login(formData)
       toast.success('Welcome back!')
-    } catch (error) {
+    } catch (error: unknown) {
+      console.error('Login error:', error)
       toast.error('Login failed. Please check your credentials.')
     } finally {
       setIsLoading(false)
@@ -68,7 +68,8 @@ export default function LoginPage() {
       formData.append('password', password)
       await signup(formData)
       toast.success('Account created successfully!')
-    } catch (error) {
+    } catch (error: unknown) {
+      console.error('Signup error:', error)
       toast.error('Signup failed. Please try again.')
     } finally {
       setIsLoading(false)
