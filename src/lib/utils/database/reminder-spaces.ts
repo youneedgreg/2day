@@ -107,7 +107,7 @@ export async function getDefaultReminderSpace(userId: string): Promise<ReminderS
   const supabase = createClient()
   
   try {
-    let { data: spaces, error } = await supabase
+    const { data: spaces, error } = await supabase
       .from('reminder_spaces')
       .select('*')
       .eq('user_id', userId)
