@@ -1,4 +1,18 @@
 // lib/types/database.ts
+
+// Define types for metadata
+type ReminderMetadata = {
+  last_triggered?: string;
+  next_trigger?: string;
+  custom_data?: Record<string, unknown>;
+}
+
+type NoteMetadata = {
+  last_edited_by?: string;
+  version?: number;
+  custom_data?: Record<string, unknown>;
+}
+
 export type Database = {
   public: {
     Tables: {
@@ -195,7 +209,7 @@ export type Database = {
           space_id: string | null
           completed_at: string | null
           is_recurring: boolean
-          reminder_metadata: any | null
+          reminder_metadata: ReminderMetadata | null
           created_at: string
           updated_at: string
         }
@@ -211,7 +225,7 @@ export type Database = {
           space_id?: string | null
           completed_at?: string | null
           is_recurring?: boolean
-          reminder_metadata?: any | null
+          reminder_metadata?: ReminderMetadata | null
           created_at?: string
           updated_at?: string
         }
@@ -227,7 +241,7 @@ export type Database = {
           space_id?: string | null
           completed_at?: string | null
           is_recurring?: boolean
-          reminder_metadata?: any | null
+          reminder_metadata?: ReminderMetadata | null
           created_at?: string
           updated_at?: string
         }
@@ -273,7 +287,7 @@ export type Database = {
           color: string | null
           tags: string[] | null
           note_type: 'text' | 'rich_text' | 'drawing' | 'checklist' | null
-          metadata: any | null
+          metadata: NoteMetadata | null
           is_pinned: boolean
           is_archived: boolean
           word_count: number
@@ -289,7 +303,7 @@ export type Database = {
           color?: string | null
           tags?: string[] | null
           note_type?: 'text' | 'rich_text' | 'drawing' | 'checklist' | null
-          metadata?: any | null
+          metadata?: NoteMetadata | null
           is_pinned?: boolean
           is_archived?: boolean
           word_count?: number
@@ -305,7 +319,7 @@ export type Database = {
           color?: string | null
           tags?: string[] | null
           note_type?: 'text' | 'rich_text' | 'drawing' | 'checklist' | null
-          metadata?: any | null
+          metadata?: NoteMetadata | null
           is_pinned?: boolean
           is_archived?: boolean
           word_count?: number
