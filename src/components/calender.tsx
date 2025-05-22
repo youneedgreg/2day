@@ -178,6 +178,7 @@ export default function Calendar() {
     } finally {
       setLoading(false)
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user])
   
   // Generate days for the calendar based on current view
