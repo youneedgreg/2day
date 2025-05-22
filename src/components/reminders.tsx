@@ -6,10 +6,10 @@ import {
   Plus, Trash2, Calendar, Bell, AlertCircle, CheckCircle, Flag, 
   Home, Briefcase, GraduationCap, ShoppingBasket, Car, Utensils, 
   Heart, Plane, Dumbbell, Music, Film, BookOpen, Smile, Wallet,
-  Gift, Zap, Coffee, Compass, Check, PenSquare, Settings, PencilRuler,
-  Edit, MoreVertical, Clock, Search, Filter, Star, Archive, Copy,
-  Eye, EyeOff, RotateCcw, Target, TrendingUp, Sparkles, Download,
-  Upload, Share, Bookmark, Tag, MapPin, Users, Lightbulb
+  Gift, Coffee, Compass, Check, PenSquare, Settings, PencilRuler,
+  Edit, MoreVertical, Clock, Search, Filter, Star, Archive,
+  Share, Bookmark, Tag, MapPin, Users, Lightbulb, X,
+  Sparkles, Download, RotateCcw, TrendingUp
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -25,10 +25,6 @@ import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerFooter, DrawerT
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu"
 import { Textarea } from "@/components/ui/textarea"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { Switch } from "@/components/ui/switch"
-import { Slider } from "@/components/ui/slider"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { cn } from "@/lib/utils"
 import { useAuth } from '@/hooks/useAuth'
 import { 
   getReminders, 
@@ -43,7 +39,6 @@ import {
 import { 
   getReminderSpaces, 
   createReminderSpace, 
-  updateReminderSpace, 
   deleteReminderSpace,
   getDefaultReminderSpace,
   type ReminderSpace 
@@ -64,15 +59,20 @@ dayjs.extend(customParseFormat)
 
 // Define types
 type Priority = "low" | "medium" | "high"
-type Reminder = Database['public']['Tables']['reminders']['Row']
+type Reminder = Database['public']['Tables']['reminders']['Row'] & {
+  location?: string;
+  tags?: string[];
+  is_archived?: boolean;
+}
 type FilterType = 'all' | 'high-priority' | 'today' | 'this-week' | 'overdue' | 'completed' | 'recurring'
 type ViewMode = 'card' | 'list' | 'compact'
+type RepeatFrequency = 'none' | 'daily' | 'weekly' | 'monthly'
 
 // Type for real-time subscription payload
 type RealtimePayload = {
   eventType: 'INSERT' | 'UPDATE' | 'DELETE';
-  new?: Record<string, any>;
-  old?: Record<string, any>;
+  new?: Record<string, unknown>;
+  old?: Record<string, unknown>;
   table: string;
 }
 
@@ -160,6 +160,31 @@ const getStatusColor = (status: string, isOverdue: boolean) => {
   return 'border-muted bg-gradient-to-br from-card to-muted/30'
 }
 
+// Update the CreateReminderInput type
+type CreateReminderInput = {
+  title: string;
+  description?: string;
+  reminder_time: string;
+  repeat_frequency: RepeatFrequency;
+  priority: Priority;
+  space_id: string;
+  location?: string;
+  tags?: string[];
+}
+
+// Update the UpdateReminderInput type
+type UpdateReminderInput = {
+  title?: string;
+  description?: string;
+  reminder_time?: string;
+  repeat_frequency?: RepeatFrequency;
+  priority?: Priority;
+  space_id?: string;
+  location?: string;
+  tags?: string[];
+  status?: 'pending' | 'completed' | 'dismissed';
+}
+
 export default function Reminders() {
   const { user } = useAuth()
   const [reminders, setReminders] = useState<Reminder[]>([])
@@ -169,7 +194,7 @@ export default function Reminders() {
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedReminders, setSelectedReminders] = useState<string[]>([])
   const [isSelectionMode, setIsSelectionMode] = useState(false)
-  const [viewMode, setViewMode] = useState<ViewMode>('card')
+  const [viewMode] = useState<ViewMode>('card')
   const [showFilters, setShowFilters] = useState(false)
   const [activeFilter, setActiveFilter] = useState<FilterType>('all')
   const [sortBy, setSortBy] = useState<'date' | 'priority' | 'space'>('date')
@@ -180,7 +205,7 @@ export default function Reminders() {
     title: '',
     description: '',
     reminder_time: '',
-    repeat_frequency: 'none' as const,
+    repeat_frequency: 'none' as RepeatFrequency,
     priority: 'medium' as Priority,
     space_id: '',
     location: '',
@@ -298,7 +323,7 @@ export default function Reminders() {
         space_id: newReminder.space_id,
         location: newReminder.location.trim() || undefined,
         tags: newReminder.tags.length > 0 ? newReminder.tags : undefined
-      })
+      } as CreateReminderInput)
       
       // Optimistic update
       setReminders(prev => [reminderData, ...prev])
@@ -333,7 +358,12 @@ export default function Reminders() {
         r.id === reminderId ? { ...r, ...updates } : r
       ))
       
-      await updateReminder(reminderId, updates)
+      const updateData: UpdateReminderInput = {
+        ...updates,
+        description: updates.description || undefined
+      }
+      
+      await updateReminder(reminderId, updateData)
       toast.success('Reminder updated successfully')
     } catch (error) {
       console.error('Error updating reminder:', error)
@@ -394,17 +424,6 @@ export default function Reminders() {
     }
   }
 
-  const handleUpdateSpace = async (spaceId: string, updates: Partial<ReminderSpace>) => {
-    try {
-      await updateReminderSpace(spaceId, updates)
-      setSpaces(prev => prev.map(s => s.id === spaceId ? { ...s, ...updates } : s))
-      toast.success('Space updated successfully')
-    } catch (error) {
-      console.error('Error updating space:', error)
-      toast.error('Failed to update space')
-    }
-  }
-
   const handleDeleteSpace = async (spaceId: string) => {
     try {
       await deleteReminderSpace(spaceId)
@@ -427,7 +446,7 @@ export default function Reminders() {
           case 'delete':
             return dismissReminder(reminderId)
           case 'archive':
-            return updateReminder(reminderId, { is_archived: true })
+            return updateReminder(reminderId, { status: 'completed' } as UpdateReminderInput)
         }
       }))
 
@@ -435,7 +454,7 @@ export default function Reminders() {
       setIsSelectionMode(false)
       toast.success(`${selectedReminders.length} reminders ${action}d`)
       fetchReminders()
-    } catch (error) {
+    } catch {
       toast.error(`Failed to ${action} reminders`)
     }
   }
@@ -460,7 +479,7 @@ export default function Reminders() {
           text: `${reminder.title}\n${reminder.description || ''}\nDue: ${formatReminderTime(reminder.reminder_time)}`,
           url: window.location.href
         })
-      } catch (error) {
+      } catch {
         console.log('Share cancelled')
       }
     } else {
@@ -1004,7 +1023,7 @@ export default function Reminders() {
                           <Label>Repeat Frequency</Label>
                           <Select
                             value={newReminder.repeat_frequency}
-                            onValueChange={(value) => setNewReminder({ ...newReminder, repeat_frequency: value as any })}
+                            onValueChange={(value: RepeatFrequency) => setNewReminder({ ...newReminder, repeat_frequency: value })}
                           >
                             <SelectTrigger className="h-12">
                               <SelectValue />
@@ -1242,7 +1261,7 @@ export default function Reminders() {
         </AnimatePresence>
 
         {/* Tabs Navigation */}
-        <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as any)}>
+        <Tabs value={activeTab} onValueChange={(value: typeof activeTab) => setActiveTab(value)}>
           <TabsList className="grid w-full grid-cols-4 h-12 bg-muted/50">
             <TabsTrigger value="all" className="font-semibold">All Reminders</TabsTrigger>
             <TabsTrigger value="upcoming" className="font-semibold">
@@ -1396,7 +1415,7 @@ export default function Reminders() {
 
                             {reminder.tags && reminder.tags.length > 0 && (
                               <div className="flex flex-wrap gap-1 ml-11">
-                                {reminder.tags.slice(0, 3).map((tag, index) => (
+                                {reminder.tags.slice(0, 3).map((tag: string, index: number) => (
                                   <Badge key={index} variant="outline" className="text-xs">
                                     #{tag}
                                   </Badge>
