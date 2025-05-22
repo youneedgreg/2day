@@ -185,8 +185,22 @@ export async function searchReminders(userId: string, query: string): Promise<Re
   }
 }
 
+// Define types for real-time changes
+type RealtimeChangePayload = {
+  schema: string
+  table: string
+  commit_timestamp: string
+  eventType: 'INSERT' | 'UPDATE' | 'DELETE'
+  new: Record<string, unknown> | null
+  old: Record<string, unknown> | null
+  errors: string[]
+}
+
 // Subscribe to real-time changes for reminders
-export function subscribeToReminderChanges(userId: string, callback: (payload: any) => void) {
+export function subscribeToReminderChanges(
+  userId: string,
+  callback: (payload: RealtimeChangePayload) => void
+) {
   const supabase = createClient()
   
   const subscription = supabase
@@ -201,11 +215,7 @@ export function subscribeToReminderChanges(userId: string, callback: (payload: a
       },
       (payload) => {
         console.log('Reminders table change:', payload)
-        callback({
-          ...payload,
-          table: 'reminders',
-          eventType: payload.eventType
-        })
+        callback(payload as RealtimeChangePayload)
       }
     )
     .subscribe((status) => {
