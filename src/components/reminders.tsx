@@ -1,13 +1,15 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { 
   Plus, Trash2, Calendar, Bell, AlertCircle, CheckCircle, Flag, 
   Home, Briefcase, GraduationCap, ShoppingBasket, Car, Utensils, 
   Heart, Plane, Dumbbell, Music, Film, BookOpen, Smile, Wallet,
   Gift, Zap, Coffee, Compass, Check, PenSquare, Settings, PencilRuler,
-  Edit, MoreVertical, Clock, Search, Filter
+  Edit, MoreVertical, Clock, Search, Filter, Star, Archive, Copy,
+  Eye, EyeOff, RotateCcw, Target, TrendingUp, Sparkles, Download,
+  Upload, Share, Bookmark, Tag, MapPin, Users, Lightbulb
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -20,9 +22,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerFooter, DrawerTrigger } from "@/components/ui/drawer"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu"
 import { Textarea } from "@/components/ui/textarea"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { Switch } from "@/components/ui/switch"
+import { Slider } from "@/components/ui/slider"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { cn } from "@/lib/utils"
 import { useAuth } from '@/hooks/useAuth'
 import { 
@@ -44,74 +49,99 @@ import {
   type ReminderSpace 
 } from '@/lib/utils/database/reminder-spaces'
 import { Database } from '@/lib/types/database'
-import { format, isToday, isTomorrow, isYesterday, isPast, isFuture } from 'date-fns'
+import dayjs from 'dayjs'
+import relativeTime from 'dayjs/plugin/relativeTime'
+import isToday from 'dayjs/plugin/isToday'
+import isTomorrow from 'dayjs/plugin/isTomorrow'
+import customParseFormat from 'dayjs/plugin/customParseFormat'
 import { toast } from 'sonner'
+
+// Initialize dayjs plugins
+dayjs.extend(relativeTime)
+dayjs.extend(isToday)
+dayjs.extend(isTomorrow)
+dayjs.extend(customParseFormat)
 
 // Define types
 type Priority = "low" | "medium" | "high"
 type Reminder = Database['public']['Tables']['reminders']['Row']
+type FilterType = 'all' | 'high-priority' | 'today' | 'this-week' | 'overdue' | 'completed' | 'recurring'
+type ViewMode = 'card' | 'list' | 'compact'
 
-// Available icons for spaces
+// Type for real-time subscription payload
+type RealtimePayload = {
+  eventType: 'INSERT' | 'UPDATE' | 'DELETE';
+  new?: Record<string, any>;
+  old?: Record<string, any>;
+  table: string;
+}
+
+// Available icons for spaces with enhanced selection
 const availableIcons = [
-  { name: "Home", icon: Home },
-  { name: "Work", icon: Briefcase },
-  { name: "School", icon: GraduationCap },
-  { name: "Shopping", icon: ShoppingBasket },
-  { name: "Transport", icon: Car },
-  { name: "Food", icon: Utensils },
-  { name: "Health", icon: Heart },
-  { name: "Travel", icon: Plane },
-  { name: "Fitness", icon: Dumbbell },
-  { name: "Music", icon: Music },
-  { name: "Entertainment", icon: Film },
-  { name: "Study", icon: BookOpen },
-  { name: "Personal", icon: Smile },
-  { name: "Finance", icon: Wallet },
-  { name: "Gifts", icon: Gift },
-  { name: "Tasks", icon: Check },
-  { name: "Projects", icon: PencilRuler },
-  { name: "Notes", icon: PenSquare },
-  { name: "Ideas", icon: Zap },
-  { name: "Coffee", icon: Coffee },
-  { name: "Adventure", icon: Compass },
-  { name: "Bell", icon: Bell }
+  { name: "Home", icon: Home, category: "Personal" },
+  { name: "Work", icon: Briefcase, category: "Professional" },
+  { name: "School", icon: GraduationCap, category: "Education" },
+  { name: "Shopping", icon: ShoppingBasket, category: "Lifestyle" },
+  { name: "Transport", icon: Car, category: "Travel" },
+  { name: "Food", icon: Utensils, category: "Lifestyle" },
+  { name: "Health", icon: Heart, category: "Personal" },
+  { name: "Travel", icon: Plane, category: "Travel" },
+  { name: "Fitness", icon: Dumbbell, category: "Health" },
+  { name: "Music", icon: Music, category: "Entertainment" },
+  { name: "Entertainment", icon: Film, category: "Entertainment" },
+  { name: "Study", icon: BookOpen, category: "Education" },
+  { name: "Personal", icon: Smile, category: "Personal" },
+  { name: "Finance", icon: Wallet, category: "Professional" },
+  { name: "Gifts", icon: Gift, category: "Personal" },
+  { name: "Tasks", icon: Check, category: "Professional" },
+  { name: "Projects", icon: PencilRuler, category: "Professional" },
+  { name: "Notes", icon: PenSquare, category: "Personal" },
+  { name: "Ideas", icon: Lightbulb, category: "Creative" },
+  { name: "Coffee", icon: Coffee, category: "Lifestyle" },
+  { name: "Adventure", icon: Compass, category: "Travel" },
+  { name: "Bell", icon: Bell, category: "General" },
+  { name: "Star", icon: Star, category: "Special" },
+  { name: "Target", icon: Target, category: "Goals" },
+  { name: "Location", icon: MapPin, category: "Places" },
+  { name: "Team", icon: Users, category: "Social" },
+  { name: "Bookmark", icon: Bookmark, category: "Reference" }
 ]
 
-// Available colors for spaces
+// Enhanced color options with gradients
 const availableColors = [
-  { name: "Red", value: "bg-red-500" },
-  { name: "Blue", value: "bg-blue-500" },
-  { name: "Green", value: "bg-green-500" },
-  { name: "Yellow", value: "bg-yellow-500" },
-  { name: "Purple", value: "bg-purple-500" },
-  { name: "Pink", value: "bg-pink-500" },
-  { name: "Indigo", value: "bg-indigo-500" },
-  { name: "Teal", value: "bg-teal-500" },
-  { name: "Orange", value: "bg-orange-500" },
-  { name: "Cyan", value: "bg-cyan-500" }
+  { name: "Crimson", value: "bg-gradient-to-br from-red-500 to-red-600", solid: "bg-red-500" },
+  { name: "Ocean", value: "bg-gradient-to-br from-blue-500 to-blue-600", solid: "bg-blue-500" },
+  { name: "Forest", value: "bg-gradient-to-br from-green-500 to-green-600", solid: "bg-green-500" },
+  { name: "Sunshine", value: "bg-gradient-to-br from-yellow-500 to-yellow-600", solid: "bg-yellow-500" },
+  { name: "Royal", value: "bg-gradient-to-br from-purple-500 to-purple-600", solid: "bg-purple-500" },
+  { name: "Rose", value: "bg-gradient-to-br from-pink-500 to-pink-600", solid: "bg-pink-500" },
+  { name: "Indigo", value: "bg-gradient-to-br from-indigo-500 to-indigo-600", solid: "bg-indigo-500" },
+  { name: "Teal", value: "bg-gradient-to-br from-teal-500 to-teal-600", solid: "bg-teal-500" },
+  { name: "Orange", value: "bg-gradient-to-br from-orange-500 to-orange-600", solid: "bg-orange-500" },
+  { name: "Cyan", value: "bg-gradient-to-br from-cyan-500 to-cyan-600", solid: "bg-cyan-500" }
 ]
 
-// Helper functions
+// Helper functions with dayjs
 const formatReminderTime = (dateString: string): string => {
-  const date = new Date(dateString)
+  const date = dayjs(dateString)
   
-  if (isToday(date)) {
-    return `Today at ${format(date, 'h:mm a')}`
-  } else if (isTomorrow(date)) {
-    return `Tomorrow at ${format(date, 'h:mm a')}`
-  } else if (isYesterday(date)) {
-    return `Yesterday at ${format(date, 'h:mm a')}`
+  if (date.isToday()) {
+    return `Today at ${date.format('h:mm A')}`
+  } else if (date.isTomorrow()) {
+    return `Tomorrow at ${date.format('h:mm A')}`
+  } else if (dayjs().subtract(1, 'day').isSame(date, 'day')) {
+    return `Yesterday at ${date.format('h:mm A')}`
   } else {
-    return format(date, 'MMM d, yyyy h:mm a')
+    return date.format('MMM D, YYYY h:mm A')
   }
 }
 
 const getPriorityColor = (priority: Priority): string => {
   switch (priority) {
-    case 'high': return 'text-red-500 bg-red-50 border-red-200'
-    case 'medium': return 'text-yellow-500 bg-yellow-50 border-yellow-200'
-    case 'low': return 'text-green-500 bg-green-50 border-green-200'
-    default: return 'text-gray-500 bg-gray-50 border-gray-200'
+    case 'high': return 'text-red-600 bg-red-50 border-red-200 dark:bg-red-950/20 dark:text-red-400'
+    case 'medium': return 'text-yellow-600 bg-yellow-50 border-yellow-200 dark:bg-yellow-950/20 dark:text-yellow-400'
+    case 'low': return 'text-green-600 bg-green-50 border-green-200 dark:bg-green-950/20 dark:text-green-400'
+    default: return 'text-gray-600 bg-gray-50 border-gray-200 dark:bg-gray-950/20 dark:text-gray-400'
   }
 }
 
@@ -124,6 +154,12 @@ const getPriorityIcon = (priority: Priority) => {
   }
 }
 
+const getStatusColor = (status: string, isOverdue: boolean) => {
+  if (status === 'completed') return 'border-green-500 bg-gradient-to-br from-green-50 to-green-100 dark:from-green-950/20 dark:to-green-900/30'
+  if (isOverdue) return 'border-red-500 bg-gradient-to-br from-red-50 to-red-100 dark:from-red-950/20 dark:to-red-900/30'
+  return 'border-muted bg-gradient-to-br from-card to-muted/30'
+}
+
 export default function Reminders() {
   const { user } = useAuth()
   const [reminders, setReminders] = useState<Reminder[]>([])
@@ -131,6 +167,12 @@ export default function Reminders() {
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState<"all" | "upcoming" | "overdue" | "completed">("all")
   const [searchQuery, setSearchQuery] = useState("")
+  const [selectedReminders, setSelectedReminders] = useState<string[]>([])
+  const [isSelectionMode, setIsSelectionMode] = useState(false)
+  const [viewMode, setViewMode] = useState<ViewMode>('card')
+  const [showFilters, setShowFilters] = useState(false)
+  const [activeFilter, setActiveFilter] = useState<FilterType>('all')
+  const [sortBy, setSortBy] = useState<'date' | 'priority' | 'space'>('date')
   
   // New reminder form state
   const [newReminderDialogOpen, setNewReminderDialogOpen] = useState(false)
@@ -140,34 +182,32 @@ export default function Reminders() {
     reminder_time: '',
     repeat_frequency: 'none' as const,
     priority: 'medium' as Priority,
-    space_id: ''
+    space_id: '',
+    location: '',
+    tags: [] as string[]
   })
+  
+  // Edit reminder state
+  const [editingReminder, setEditingReminder] = useState<Reminder | null>(null)
   
   // New space form state
   const [newSpaceDialogOpen, setNewSpaceDialogOpen] = useState(false)
   const [newSpace, setNewSpace] = useState({
     name: '',
     icon: 'Bell',
-    color: 'bg-blue-500'
+    color: 'bg-gradient-to-br from-blue-500 to-blue-600',
+    description: ''
   })
 
-  useEffect(() => {
-    if (!user) return
+  // Quick stats
+  const [stats, setStats] = useState({
+    total: 0,
+    completed: 0,
+    overdue: 0,
+    upcoming: 0
+  })
 
-    initializeData()
-
-    // Subscribe to real-time updates
-    const subscription = subscribeToReminderChanges(user.id, (payload) => {
-      console.log('Real-time reminder update:', payload)
-      handleRealTimeUpdate(payload)
-    })
-
-    return () => {
-      subscription.unsubscribe()
-    }
-  }, [user])
-
-  const initializeData = async () => {
+  const initializeData = useCallback(async () => {
     if (!user) return
     
     try {
@@ -184,7 +224,7 @@ export default function Reminders() {
         setNewReminder(prev => ({ ...prev, space_id: spacesData[0].id }))
       }
       
-      // Fetch reminders
+      // Fetch all types of reminders
       await fetchReminders()
     } catch (error) {
       console.error('Error initializing data:', error)
@@ -192,31 +232,61 @@ export default function Reminders() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [user])
 
-  const handleRealTimeUpdate = (payload: any) => {
+  const handleRealTimeUpdate = useCallback((payload: RealtimePayload) => {
     if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE' || payload.eventType === 'DELETE') {
       fetchReminders()
     }
-  }
+  }, [])
 
-  const fetchReminders = async () => {
+  const fetchReminders = useCallback(async () => {
     if (!user) return
     try {
-      const data = await getReminders(user.id)
-      setReminders(data)
+      const [allReminders, upcomingReminders, overdueReminders] = await Promise.all([
+        getReminders(user.id),
+        getUpcomingReminders(user.id),
+        getOverdueReminders(user.id)
+      ])
+      
+      setReminders(allReminders)
+      
+      // Calculate stats
+      const completedCount = allReminders.filter(r => r.status === 'completed').length
+      setStats({
+        total: allReminders.length,
+        completed: completedCount,
+        overdue: overdueReminders.length,
+        upcoming: upcomingReminders.length
+      })
     } catch (error) {
       console.error('Error fetching reminders:', error)
       toast.error('Failed to load reminders')
     }
-  }
+  }, [user])
+
+  useEffect(() => {
+    if (!user) return
+
+    initializeData()
+
+    // Subscribe to real-time updates
+    const subscription = subscribeToReminderChanges(user.id, (payload) => {
+      console.log('Real-time reminder update:', payload)
+      handleRealTimeUpdate(payload)
+    })
+
+    return () => {
+      subscription.unsubscribe()
+    }
+  }, [user, initializeData, handleRealTimeUpdate])
 
   const handleCreateReminder = async () => {
     if (!user || !newReminder.title.trim()) return
 
     // Set default time if not provided
     const reminderTime = newReminder.reminder_time || 
-      new Date(Date.now() + 60 * 60 * 1000).toISOString() // 1 hour from now
+      dayjs().add(1, 'hour').toISOString()
 
     try {
       const reminderData = await createReminder(user.id, {
@@ -225,7 +295,9 @@ export default function Reminders() {
         reminder_time: reminderTime,
         repeat_frequency: newReminder.repeat_frequency,
         priority: newReminder.priority,
-        space_id: newReminder.space_id
+        space_id: newReminder.space_id,
+        location: newReminder.location.trim() || undefined,
+        tags: newReminder.tags.length > 0 ? newReminder.tags : undefined
       })
       
       // Optimistic update
@@ -238,7 +310,9 @@ export default function Reminders() {
         reminder_time: '',
         repeat_frequency: 'none',
         priority: 'medium',
-        space_id: spaces[0]?.id || ''
+        space_id: spaces[0]?.id || '',
+        location: '',
+        tags: []
       })
       setNewReminderDialogOpen(false)
       
@@ -249,6 +323,22 @@ export default function Reminders() {
     } catch (error) {
       console.error('Error creating reminder:', error)
       toast.error('Failed to create reminder')
+    }
+  }
+
+  const handleUpdateReminder = async (reminderId: string, updates: Partial<Reminder>) => {
+    try {
+      // Optimistic update
+      setReminders(prev => prev.map(r => 
+        r.id === reminderId ? { ...r, ...updates } : r
+      ))
+      
+      await updateReminder(reminderId, updates)
+      toast.success('Reminder updated successfully')
+    } catch (error) {
+      console.error('Error updating reminder:', error)
+      toast.error('Failed to update reminder')
+      fetchReminders() // Revert on error
     }
   }
 
@@ -289,17 +379,29 @@ export default function Reminders() {
       const spaceData = await createReminderSpace(user.id, {
         name: newSpace.name.trim(),
         icon: newSpace.icon,
-        color: newSpace.color
+        color: newSpace.color,
+        description: newSpace.description.trim() || undefined
       })
       
       setSpaces(prev => [...prev, spaceData])
-      setNewSpace({ name: '', icon: 'Bell', color: 'bg-blue-500' })
+      setNewSpace({ name: '', icon: 'Bell', color: 'bg-gradient-to-br from-blue-500 to-blue-600', description: '' })
       setNewSpaceDialogOpen(false)
       
       toast.success('Space created successfully')
     } catch (error) {
       console.error('Error creating space:', error)
       toast.error('Failed to create space')
+    }
+  }
+
+  const handleUpdateSpace = async (spaceId: string, updates: Partial<ReminderSpace>) => {
+    try {
+      await updateReminderSpace(spaceId, updates)
+      setSpaces(prev => prev.map(s => s.id === spaceId ? { ...s, ...updates } : s))
+      toast.success('Space updated successfully')
+    } catch (error) {
+      console.error('Error updating space:', error)
+      toast.error('Failed to update space')
     }
   }
 
@@ -314,35 +416,124 @@ export default function Reminders() {
     }
   }
 
-  // Filter reminders based on active tab and search
+  const handleBulkAction = async (action: 'complete' | 'delete' | 'archive') => {
+    if (selectedReminders.length === 0) return
+
+    try {
+      await Promise.all(selectedReminders.map(reminderId => {
+        switch (action) {
+          case 'complete':
+            return completeReminder(reminderId)
+          case 'delete':
+            return dismissReminder(reminderId)
+          case 'archive':
+            return updateReminder(reminderId, { is_archived: true })
+        }
+      }))
+
+      setSelectedReminders([])
+      setIsSelectionMode(false)
+      toast.success(`${selectedReminders.length} reminders ${action}d`)
+      fetchReminders()
+    } catch (error) {
+      toast.error(`Failed to ${action} reminders`)
+    }
+  }
+
+  const exportReminders = () => {
+    const dataStr = JSON.stringify(filteredReminders, null, 2)
+    const dataBlob = new Blob([dataStr], { type: 'application/json' })
+    const url = URL.createObjectURL(dataBlob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `reminders-export-${dayjs().format('YYYY-MM-DD')}.json`
+    link.click()
+    URL.revokeObjectURL(url)
+    toast.success('Reminders exported successfully')
+  }
+
+  const shareReminder = async (reminder: Reminder) => {
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: reminder.title,
+          text: `${reminder.title}\n${reminder.description || ''}\nDue: ${formatReminderTime(reminder.reminder_time)}`,
+          url: window.location.href
+        })
+      } catch (error) {
+        console.log('Share cancelled')
+      }
+    } else {
+      // Fallback: copy to clipboard
+      const shareText = `${reminder.title}\n${reminder.description || ''}\nDue: ${formatReminderTime(reminder.reminder_time)}`
+      await navigator.clipboard.writeText(shareText)
+      toast.success('Reminder copied to clipboard')
+    }
+  }
+
+  // Advanced filtering logic
   const filteredReminders = reminders.filter(reminder => {
-    // Filter by search query
+    // Search filter
     if (searchQuery) {
       const query = searchQuery.toLowerCase()
       const matchesSearch = 
         reminder.title.toLowerCase().includes(query) ||
-        (reminder.description && reminder.description.toLowerCase().includes(query))
+        (reminder.description && reminder.description.toLowerCase().includes(query)) ||
+        (reminder.location && reminder.location.toLowerCase().includes(query)) ||
+        (reminder.tags && reminder.tags.some(tag => tag.toLowerCase().includes(query)))
       if (!matchesSearch) return false
     }
 
-    // Filter by tab
-    switch (activeTab) {
-      case 'upcoming':
-        return reminder.status === 'pending' && isFuture(new Date(reminder.reminder_time))
+    // Advanced filters
+    const now = dayjs()
+    const reminderDate = dayjs(reminder.reminder_time)
+    
+    switch (activeFilter) {
+      case 'high-priority':
+        return reminder.priority === 'high'
+      case 'today':
+        return reminderDate.isToday()
+      case 'this-week':
+        return reminderDate.isAfter(now) && reminderDate.isBefore(now.add(7, 'day'))
       case 'overdue':
-        return reminder.status === 'pending' && isPast(new Date(reminder.reminder_time))
+        return reminder.status === 'pending' && reminderDate.isBefore(now)
       case 'completed':
         return reminder.status === 'completed'
+      case 'recurring':
+        return reminder.repeat_frequency !== 'none'
       default:
-        return reminder.status === 'pending'
+        // Apply tab filters
+        switch (activeTab) {
+          case 'upcoming':
+            return reminder.status === 'pending' && reminderDate.isAfter(now)
+          case 'overdue':
+            return reminder.status === 'pending' && reminderDate.isBefore(now)
+          case 'completed':
+            return reminder.status === 'completed'
+          default:
+            return reminder.status === 'pending'
+        }
+    }
+  }).sort((a, b) => {
+    // Sorting logic
+    switch (sortBy) {
+      case 'priority':
+        const priorityOrder = { high: 3, medium: 2, low: 1 }
+        return (priorityOrder[b.priority || 'medium'] || 0) - (priorityOrder[a.priority || 'medium'] || 0)
+      case 'space':
+        const spaceA = getSpaceDetails(a.space_id)
+        const spaceB = getSpaceDetails(b.space_id)
+        return spaceA.name.localeCompare(spaceB.name)
+      default:
+        return dayjs(a.reminder_time).unix() - dayjs(b.reminder_time).unix()
     }
   })
 
   // Get space details
   const getSpaceDetails = (spaceId: string | null) => {
-    if (!spaceId) return { name: 'General', icon: 'Bell', color: 'bg-blue-500' }
+    if (!spaceId) return { name: 'General', icon: 'Bell', color: 'bg-gradient-to-br from-blue-500 to-blue-600' }
     const space = spaces.find(s => s.id === spaceId)
-    return space || { name: 'General', icon: 'Bell', color: 'bg-blue-500' }
+    return space || { name: 'General', icon: 'Bell', color: 'bg-gradient-to-br from-blue-500 to-blue-600' }
   }
 
   // Get icon component
@@ -351,379 +542,930 @@ export default function Reminders() {
     return iconData?.icon || Bell
   }
 
+  // Animation variants
+  const containerVariants = {
+    hidden: { opacity: 0 },
+    visible: {
+      opacity: 1,
+      transition: {
+        staggerChildren: 0.1
+      }
+    }
+  }
+
+  const cardVariants = {
+    hidden: { opacity: 0, y: 20, scale: 0.95 },
+    visible: {
+      opacity: 1,
+      y: 0,
+      scale: 1,
+      transition: {
+        type: "spring",
+        stiffness: 100,
+        damping: 15
+      }
+    },
+    exit: {
+      opacity: 0,
+      scale: 0.95,
+      transition: { duration: 0.2 }
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex justify-center items-center py-20">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+        <motion.div 
+          className="flex items-center gap-3 p-6 rounded-xl bg-gradient-to-r from-primary/10 to-primary/5"
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.3 }}
+        >
+          <div className="animate-spin rounded-full h-6 w-6 border-2 border-primary border-t-transparent"></div>
+          <span className="font-medium">Loading reminders...</span>
+        </motion.div>
       </div>
     )
   }
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
+    <div className="space-y-8">
+      {/* Enhanced Header */}
       <motion.div
-        className="flex justify-between items-center"
-        initial={{ opacity: 0, y: -10 }}
+        className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 p-6 bg-gradient-to-r from-primary/5 to-primary/10 rounded-2xl"
+        initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.3 }}
+        transition={{ duration: 0.5 }}
       >
-        <div className="flex items-center gap-2">
-          <h2 className="text-2xl font-bold">Reminders</h2>
-          <motion.div
-            initial={{ rotate: 0 }}
-            animate={{ rotate: [0, 15, 0, -15, 0] }}
-            transition={{ duration: 2, repeat: Number.POSITIVE_INFINITY, repeatDelay: 5 }}
-          >
-            <Bell className="h-5 w-5 text-blue-500" />
-          </motion.div>
+        <div className="flex items-center gap-4">
+          <div className="p-3 bg-primary/20 rounded-xl shadow-lg">
+            <Bell className="h-8 w-8 text-primary" />
+          </div>
+          <div>
+            <div className="flex items-center gap-3">
+              <h2 className="text-3xl font-bold">Reminders</h2>
+              <motion.div
+                initial={{ rotate: 0 }}
+                animate={{ rotate: [0, 15, 0, -15, 0] }}
+                transition={{ duration: 2, repeat: Infinity, repeatDelay: 5 }}
+              >
+                <Sparkles className="h-6 w-6 text-amber-500" />
+              </motion.div>
+            </div>
+            <p className="text-lg text-muted-foreground">Never miss what matters most</p>
+          </div>
         </div>
         
-        <div className="flex gap-2">
-          {/* New Space Button */}
-          <Dialog open={newSpaceDialogOpen} onOpenChange={setNewSpaceDialogOpen}>
-            <DialogTrigger asChild>
-              <Button variant="outline" size="sm">
-                <Settings className="h-4 w-4 mr-2" />
-                Spaces
-              </Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Manage Spaces</DialogTitle>
-              </DialogHeader>
-              
-              <div className="space-y-4">
-                {/* Create new space */}
-                <div className="space-y-3 border-b pb-4">
-                  <h4 className="font-medium">Create New Space</h4>
-                  <Input
-                    placeholder="Space name..."
-                    value={newSpace.name}
-                    onChange={(e) => setNewSpace({ ...newSpace, name: e.target.value })}
-                  />
-                  
-                  <div className="grid grid-cols-6 gap-2">
-                    {availableIcons.slice(0, 12).map((iconItem) => {
-                      const IconComponent = iconItem.icon
-                      return (
-                        <button
-                          key={iconItem.name}
-                          onClick={() => setNewSpace({ ...newSpace, icon: iconItem.name })}
-                          className={cn(
-                            "p-2 rounded-md border",
-                            newSpace.icon === iconItem.name ? "border-primary bg-primary/10" : "border-border"
-                          )}
-                        >
-                          <IconComponent className="h-4 w-4" />
-                        </button>
-                      )
-                    })}
-                  </div>
-                  
-                  <div className="grid grid-cols-5 gap-2">
-                    {availableColors.map((color) => (
-                      <button
-                        key={color.name}
-                        onClick={() => setNewSpace({ ...newSpace, color: color.value })}
-                        className={cn(
-                          "h-8 rounded-md border-2",
-                          color.value,
-                          newSpace.color === color.value ? "border-foreground" : "border-transparent"
-                        )}
-                      />
-                    ))}
-                  </div>
-                  
-                  <Button onClick={handleCreateSpace} className="w-full">
-                    Create Space
-                  </Button>
-                </div>
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Quick Stats */}
+          <div className="hidden lg:flex items-center gap-4 px-4 py-2 bg-background rounded-xl shadow-sm border">
+            <div className="text-center">
+              <div className="text-sm font-semibold">{stats.total}</div>
+              <div className="text-xs text-muted-foreground">Total</div>
+            </div>
+            <div className="text-center">
+              <div className="text-sm font-semibold text-red-600">{stats.overdue}</div>
+              <div className="text-xs text-muted-foreground">Overdue</div>
+            </div>
+            <div className="text-center">
+              <div className="text-sm font-semibold text-blue-600">{stats.upcoming}</div>
+              <div className="text-xs text-muted-foreground">Upcoming</div>
+            </div>
+            <div className="text-center">
+              <div className="text-sm font-semibold text-green-600">{stats.completed}</div>
+              <div className="text-xs text-muted-foreground">Done</div>
+            </div>
+          </div>
 
-                {/* Existing spaces */}
-                <div className="space-y-2 max-h-48 overflow-y-auto">
-                  <h4 className="font-medium">Existing Spaces</h4>
-                  {spaces.map((space) => {
-                    const IconComponent = getIconComponent(space.icon)
-                    return (
-                      <div key={space.id} className="flex items-center justify-between p-2 border rounded-md">
-                        <div className="flex items-center gap-2">
-                          <div className={cn("p-1.5 rounded-md", space.color)}>
-                            <IconComponent className="h-4 w-4 text-white" />
-                          </div>
-                          <span className="text-sm">{space.name}</span>
-                        </div>
-                        {space.name !== 'General' && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleDeleteSpace(space.id)}
-                          >
-                            <Trash2 className="h-3 w-3" />
-                          </Button>
-                        )}
-                      </div>
-                    )
-                  })}
-                </div>
-              </div>
-            </DialogContent>
-          </Dialog>
+          {/* Selection Mode Toggle */}
+          {filteredReminders.length > 0 && (
+            <Button
+              variant={isSelectionMode ? "default" : "outline"}
+              size="sm"
+              onClick={() => {
+                setIsSelectionMode(!isSelectionMode)
+                setSelectedReminders([])
+              }}
+            >
+              <Check className="h-4 w-4 mr-2" />
+              Select
+            </Button>
+          )}
 
-          {/* New Reminder Button */}
-          <Dialog open={newReminderDialogOpen} onOpenChange={setNewReminderDialogOpen}>
-            <DialogTrigger asChild>
-              <Button>
-                <Plus className="h-4 w-4 mr-2" />
-                New Reminder
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-md">
-              <DialogHeader>
-                <DialogTitle>Create New Reminder</DialogTitle>
-              </DialogHeader>
-              
-              <div className="space-y-4 py-4">
-                <div className="space-y-2">
-                  <Label htmlFor="reminder-title">Title</Label>
+          {/* Mobile Quick Add Drawer */}
+          <div className="lg:hidden">
+            <Drawer>
+              <DrawerTrigger asChild>
+                <Button size="sm">
+                  <Plus className="h-4 w-4 mr-2" />
+                  Quick Add
+                </Button>
+              </DrawerTrigger>
+              <DrawerContent>
+                <DrawerHeader>
+                  <DrawerTitle>Quick Reminder</DrawerTitle>
+                </DrawerHeader>
+                <div className="p-4 space-y-4">
                   <Input
-                    id="reminder-title"
                     placeholder="What do you need to remember?"
                     value={newReminder.title}
                     onChange={(e) => setNewReminder({ ...newReminder, title: e.target.value })}
                   />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="reminder-description">Description (optional)</Label>
-                  <Textarea
-                    id="reminder-description"
-                    placeholder="Additional details..."
-                    value={newReminder.description}
-                    onChange={(e) => setNewReminder({ ...newReminder, description: e.target.value })}
-                    rows={3}
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="reminder-time">When?</Label>
-                  <Input
-                    id="reminder-time"
-                    type="datetime-local"
-                    value={newReminder.reminder_time}
-                    onChange={(e) => setNewReminder({ ...newReminder, reminder_time: e.target.value })}
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>Priority</Label>
-                    <Select
-                      value={newReminder.priority}
-                      onValueChange={(value: Priority) => setNewReminder({ ...newReminder, priority: value })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="low">Low</SelectItem>
-                        <SelectItem value="medium">Medium</SelectItem>
-                        <SelectItem value="high">High</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label>Repeat</Label>
-                    <Select
-                      value={newReminder.repeat_frequency}
-                      onValueChange={(value) => setNewReminder({ ...newReminder, repeat_frequency: value as any })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="none">None</SelectItem>
-                        <SelectItem value="daily">Daily</SelectItem>
-                        <SelectItem value="weekly">Weekly</SelectItem>
-                        <SelectItem value="monthly">Monthly</SelectItem>
-                      </SelectContent>
-                    </Select>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Button onClick={handleCreateReminder} className="w-full">
+                      Create
+                    </Button>
+                    <Button variant="outline" className="w-full">
+                      Cancel
+                    </Button>
                   </div>
                 </div>
+                <DrawerFooter />
+              </DrawerContent>
+            </Drawer>
+          </div>
 
-                <div className="space-y-2">
-                  <Label>Space</Label>
-                  <Select
-                    value={newReminder.space_id}
-                    onValueChange={(value) => setNewReminder({ ...newReminder, space_id: value })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {spaces.map((space) => {
-                        const IconComponent = getIconComponent(space.icon)
-                        return (
-                          <SelectItem key={space.id} value={space.id}>
-                            <div className="flex items-center gap-2">
-                              <div className={cn("p-1 rounded", space.color)}>
-                                <IconComponent className="h-3 w-3 text-white" />
+          {/* Desktop Actions */}
+          <div className="hidden lg:flex gap-2">
+            {/* Spaces Management */}
+            <Dialog open={newSpaceDialogOpen} onOpenChange={setNewSpaceDialogOpen}>
+              <DialogTrigger asChild>
+                <Button variant="outline" size="sm">
+                  <Settings className="h-4 w-4 mr-2" />
+                  Spaces
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+                <DialogHeader>
+                  <DialogTitle className="text-xl flex items-center gap-2">
+                    <Settings className="h-5 w-5" />
+                    Manage Spaces
+                  </DialogTitle>
+                </DialogHeader>
+                
+                <Tabs defaultValue="create" className="w-full">
+                  <TabsList className="grid w-full grid-cols-2">
+                    <TabsTrigger value="create">Create New</TabsTrigger>
+                    <TabsTrigger value="manage">Manage Existing</TabsTrigger>
+                  </TabsList>
+                  
+                  <TabsContent value="create" className="space-y-6 mt-6">
+                    <div className="space-y-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="space-name">Space Name</Label>
+                        <Input
+                          id="space-name"
+                          placeholder="e.g., Work Projects, Personal Tasks..."
+                          value={newSpace.name}
+                          onChange={(e) => setNewSpace({ ...newSpace, name: e.target.value })}
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label>Description (optional)</Label>
+                        <Textarea
+                          placeholder="What kind of reminders will this space contain?"
+                          value={newSpace.description}
+                          onChange={(e) => setNewSpace({ ...newSpace, description: e.target.value })}
+                          rows={2}
+                        />
+                      </div>
+                      
+                      <div className="space-y-3">
+                        <Label>Choose an Icon</Label>
+                        <Tabs defaultValue="Personal" className="w-full">
+                          <TabsList className="grid w-full grid-cols-4">
+                            <TabsTrigger value="Personal">Personal</TabsTrigger>
+                            <TabsTrigger value="Professional">Work</TabsTrigger>
+                            <TabsTrigger value="Lifestyle">Life</TabsTrigger>
+                            <TabsTrigger value="Creative">Creative</TabsTrigger>
+                          </TabsList>
+                          
+                          {["Personal", "Professional", "Lifestyle", "Creative"].map(category => (
+                            <TabsContent key={category} value={category}>
+                              <div className="grid grid-cols-8 gap-2 p-2">
+                                {availableIcons.filter(icon => icon.category === category).map((iconItem) => {
+                                  const IconComponent = iconItem.icon
+                                  return (
+                                    <motion.button
+                                      key={iconItem.name}
+                                      whileHover={{ scale: 1.1 }}
+                                      whileTap={{ scale: 0.9 }}
+                                      onClick={() => setNewSpace({ ...newSpace, icon: iconItem.name })}
+                                      className={cn(
+                                        "p-3 rounded-lg border transition-all",
+                                        newSpace.icon === iconItem.name 
+                                          ? "border-primary bg-primary/10 ring-2 ring-primary/20" 
+                                          : "border-muted hover:border-muted-foreground/50"
+                                      )}
+                                      title={iconItem.name}
+                                    >
+                                      <IconComponent className="h-5 w-5" />
+                                    </motion.button>
+                                  )
+                                })}
                               </div>
-                              {space.name}
+                            </TabsContent>
+                          ))}
+                        </Tabs>
+                      </div>
+                      
+                      <div className="space-y-3">
+                        <Label>Choose a Color Theme</Label>
+                        <div className="grid grid-cols-5 gap-3">
+                          {availableColors.map((color) => (
+                            <motion.button
+                              key={color.name}
+                              whileHover={{ scale: 1.05 }}
+                              whileTap={{ scale: 0.95 }}
+                              onClick={() => setNewSpace({ ...newSpace, color: color.value })}
+                              className={cn(
+                                "h-12 rounded-xl border-2 transition-all shadow-sm",
+                                color.value,
+                                newSpace.color === color.value ? "border-foreground ring-2 ring-foreground/20" : "border-transparent hover:border-muted-foreground/30"
+                              )}
+                              title={color.name}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                      
+                      <Button onClick={handleCreateSpace} className="w-full h-12">
+                        <Plus className="h-4 w-4 mr-2" />
+                        Create Space
+                      </Button>
+                    </div>
+                  </TabsContent>
+
+                  <TabsContent value="manage" className="mt-6">
+                    <ScrollArea className="max-h-96">
+                      <div className="space-y-3">
+                        {spaces.map((space) => {
+                          const IconComponent = getIconComponent(space.icon)
+                          return (
+                            <motion.div 
+                              key={space.id} 
+                              className="flex items-center justify-between p-4 border rounded-xl bg-gradient-to-r from-card to-muted/20"
+                              whileHover={{ scale: 1.01 }}
+                            >
+                              <div className="flex items-center gap-3">
+                                <div className={cn("p-2 rounded-lg shadow-sm", space.color)}>
+                                  <IconComponent className="h-5 w-5 text-white" />
+                                </div>
+                                <div>
+                                  <span className="font-medium">{space.name}</span>
+                                  {space.description && (
+                                    <p className="text-sm text-muted-foreground">{space.description}</p>
+                                  )}
+                                </div>
+                              </div>
+                              <div className="flex gap-2">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => {
+                                    // Edit functionality could be implemented here
+                                    toast.info('Edit functionality coming soon!')
+                                  }}
+                                >
+                                  <Edit className="h-4 w-4" />
+                                </Button>
+                                {space.name !== 'General' && (
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => handleDeleteSpace(space.id)}
+                                    className="text-red-500 hover:text-red-700"
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                )}
+                              </div>
+                            </motion.div>
+                          )
+                        })}
+                      </div>
+                    </ScrollArea>
+                  </TabsContent>
+                </Tabs>
+              </DialogContent>
+            </Dialog>
+
+            {/* Actions Menu */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm">
+                  <MoreVertical className="h-4 w-4 mr-2" />
+                  Actions
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-48">
+                <DropdownMenuItem onClick={exportReminders}>
+                  <Download className="h-4 w-4 mr-2" />
+                  Export Reminders
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setShowFilters(!showFilters)}>
+                  <Filter className="h-4 w-4 mr-2" />
+                  {showFilters ? 'Hide' : 'Show'} Filters
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => setActiveFilter('all')}>
+                  <RotateCcw className="h-4 w-4 mr-2" />
+                  Reset Filters
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            {/* New Reminder Button */}
+            <Dialog open={newReminderDialogOpen} onOpenChange={setNewReminderDialogOpen}>
+              <DialogTrigger asChild>
+                <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+                  <Button size="lg" className="bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 shadow-lg">
+                    <Plus className="h-5 w-5 mr-2" />
+                    New Reminder
+                  </Button>
+                </motion.div>
+              </DialogTrigger>
+              <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+                <DialogHeader>
+                  <DialogTitle className="text-2xl flex items-center gap-3">
+                    <div className="p-2 bg-primary/20 rounded-lg">
+                      <Bell className="h-6 w-6 text-primary" />
+                    </div>
+                    Create New Reminder
+                  </DialogTitle>
+                </DialogHeader>
+                
+                <Tabs defaultValue="basic" className="py-4">
+                  <TabsList className="grid w-full grid-cols-3">
+                    <TabsTrigger value="basic">Basic Info</TabsTrigger>
+                    <TabsTrigger value="timing">Timing</TabsTrigger>
+                    <TabsTrigger value="details">Details</TabsTrigger>
+                  </TabsList>
+
+                  <TabsContent value="basic" className="space-y-6 mt-6">
+                    <div className="space-y-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="reminder-title">What do you need to remember?</Label>
+                        <Input
+                          id="reminder-title"
+                          placeholder="e.g., Call dentist, Buy groceries..."
+                          value={newReminder.title}
+                          onChange={(e) => setNewReminder({ ...newReminder, title: e.target.value })}
+                          className="h-12"
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="reminder-description">Description (optional)</Label>
+                        <Textarea
+                          id="reminder-description"
+                          placeholder="Additional details or context..."
+                          value={newReminder.description}
+                          onChange={(e) => setNewReminder({ ...newReminder, description: e.target.value })}
+                          rows={3}
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label>Space</Label>
+                        <Select
+                          value={newReminder.space_id}
+                          onValueChange={(value) => setNewReminder({ ...newReminder, space_id: value })}
+                        >
+                          <SelectTrigger className="h-12">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {spaces.map((space) => {
+                              const IconComponent = getIconComponent(space.icon)
+                              return (
+                                <SelectItem key={space.id} value={space.id}>
+                                  <div className="flex items-center gap-2">
+                                    <div className={cn("p-1 rounded", space.color)}>
+                                      <IconComponent className="h-3 w-3 text-white" />
+                                    </div>
+                                    {space.name}
+                                  </div>
+                                </SelectItem>
+                              )
+                            })}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                  </TabsContent>
+
+                  <TabsContent value="timing" className="space-y-6 mt-6">
+                    <div className="space-y-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="reminder-time">When do you want to be reminded?</Label>
+                        <Input
+                          id="reminder-time"
+                          type="datetime-local"
+                          value={newReminder.reminder_time}
+                          onChange={(e) => setNewReminder({ ...newReminder, reminder_time: e.target.value })}
+                          className="h-12"
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label>Priority Level</Label>
+                          <RadioGroup
+                            value={newReminder.priority}
+                            onValueChange={(value: Priority) => setNewReminder({ ...newReminder, priority: value })}
+                          >
+                            <div className="flex items-center space-x-2 p-3 border rounded-lg">
+                              <RadioGroupItem value="low" id="low" />
+                              <Label htmlFor="low" className="flex items-center gap-2 cursor-pointer">
+                                <CheckCircle className="h-4 w-4 text-green-500" />
+                                Low Priority
+                              </Label>
                             </div>
-                          </SelectItem>
-                        )
-                      })}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              
-              <DialogFooter>
-                <Button variant="outline" onClick={() => setNewReminderDialogOpen(false)}>
-                  Cancel
-                </Button>
-                <Button onClick={handleCreateReminder}>
-                  Create Reminder
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
+                            <div className="flex items-center space-x-2 p-3 border rounded-lg">
+                              <RadioGroupItem value="medium" id="medium" />
+                              <Label htmlFor="medium" className="flex items-center gap-2 cursor-pointer">
+                                <Flag className="h-4 w-4 text-yellow-500" />
+                                Medium Priority
+                              </Label>
+                            </div>
+                            <div className="flex items-center space-x-2 p-3 border rounded-lg">
+                              <RadioGroupItem value="high" id="high" />
+                              <Label htmlFor="high" className="flex items-center gap-2 cursor-pointer">
+                                <AlertCircle className="h-4 w-4 text-red-500" />
+                                High Priority
+                              </Label>
+                            </div>
+                          </RadioGroup>
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label>Repeat Frequency</Label>
+                          <Select
+                            value={newReminder.repeat_frequency}
+                            onValueChange={(value) => setNewReminder({ ...newReminder, repeat_frequency: value as any })}
+                          >
+                            <SelectTrigger className="h-12">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="none">No Repeat</SelectItem>
+                              <SelectItem value="daily">Daily</SelectItem>
+                              <SelectItem value="weekly">Weekly</SelectItem>
+                              <SelectItem value="monthly">Monthly</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                    </div>
+                  </TabsContent>
+
+                  <TabsContent value="details" className="space-y-6 mt-6">
+                    <div className="space-y-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="reminder-location">Location (optional)</Label>
+                        <Input
+                          id="reminder-location"
+                          placeholder="e.g., Home, Office, Grocery Store..."
+                          value={newReminder.location}
+                          onChange={(e) => setNewReminder({ ...newReminder, location: e.target.value })}
+                          className="h-12"
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label>Tags (optional)</Label>
+                        <div className="flex flex-wrap gap-2 mb-2">
+                          {newReminder.tags.map((tag, index) => (
+                            <Badge key={index} variant="secondary" className="flex items-center gap-1 px-3 py-1">
+                              #{tag}
+                              <button
+                                onClick={() => setNewReminder(prev => ({
+                                  ...prev,
+                                  tags: prev.tags.filter((_, i) => i !== index)
+                                }))}
+                              >
+                                <X className="h-3 w-3" />
+                              </button>
+                            </Badge>
+                          ))}
+                        </div>
+                        <div className="flex gap-2">
+                          <Input
+                            placeholder="Add a tag..."
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' && e.currentTarget.value.trim()) {
+                                e.preventDefault()
+                                const newTag = e.currentTarget.value.trim()
+                                if (!newReminder.tags.includes(newTag)) {
+                                  setNewReminder(prev => ({
+                                    ...prev,
+                                    tags: [...prev.tags, newTag]
+                                  }))
+                                }
+                                e.currentTarget.value = ''
+                              }
+                            }}
+                          />
+                          <Button 
+                            type="button" 
+                            variant="outline"
+                            onClick={(e) => {
+                              const input = e.currentTarget.parentElement?.querySelector('input')
+                              if (input?.value.trim()) {
+                                const newTag = input.value.trim()
+                                if (!newReminder.tags.includes(newTag)) {
+                                  setNewReminder(prev => ({
+                                    ...prev,
+                                    tags: [...prev.tags, newTag]
+                                  }))
+                                }
+                                input.value = ''
+                              }
+                            }}
+                          >
+                            <Tag className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  </TabsContent>
+                </Tabs>
+                
+                <DialogFooter className="gap-3">
+                  <Button variant="outline" onClick={() => setNewReminderDialogOpen(false)} className="h-10">
+                    Cancel
+                  </Button>
+                  <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+                    <Button onClick={handleCreateReminder} className="h-10 px-6">
+                      Create Reminder
+                    </Button>
+                  </motion.div>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          </div>
         </div>
       </motion.div>
 
-      {/* Search and Filters */}
+      {/* Bulk Actions Bar */}
+      <AnimatePresence>
+        {isSelectionMode && selectedReminders.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            className="flex items-center justify-between p-4 bg-primary/10 rounded-xl border"
+          >
+            <span className="font-medium">
+              {selectedReminders.length} reminder{selectedReminders.length > 1 ? 's' : ''} selected
+            </span>
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" onClick={() => handleBulkAction('complete')}>
+                <CheckCircle className="h-4 w-4 mr-2" />
+                Complete
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => handleBulkAction('archive')}>
+                <Archive className="h-4 w-4 mr-2" />
+                Archive
+              </Button>
+              <Button variant="destructive" size="sm" onClick={() => handleBulkAction('delete')}>
+                <Trash2 className="h-4 w-4 mr-2" />
+                Delete
+              </Button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Enhanced Search and Filters */}
       <motion.div
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.1 }}
-        className="flex flex-col sm:flex-row gap-4"
+        className="space-y-4"
       >
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
-          <Input
-            placeholder="Search reminders..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-10"
-          />
+        <div className="flex flex-col lg:flex-row gap-4">
+          <div className="relative flex-1">
+            <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-muted-foreground h-5 w-5" />
+            <Input
+              placeholder="Search reminders by title, description, location, or tags..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-12 h-12 text-base"
+            />
+          </div>
+          
+          <div className="flex gap-3">
+            <Button
+              variant={showFilters ? "default" : "outline"}
+              onClick={() => setShowFilters(!showFilters)}
+              className="h-12 px-4"
+            >
+              <Filter className="h-4 w-4 mr-2" />
+              Filters
+            </Button>
+            
+            <Select value={sortBy} onValueChange={(value: 'date' | 'priority' | 'space') => setSortBy(value)}>
+              <SelectTrigger className="w-32 h-12">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="date">By Date</SelectItem>
+                <SelectItem value="priority">By Priority</SelectItem>
+                <SelectItem value="space">By Space</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </div>
-        
+
+        {/* Advanced Filters */}
+        <AnimatePresence>
+          {showFilters && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: "auto" }}
+              exit={{ opacity: 0, height: 0 }}
+              className="p-4 bg-muted/20 rounded-xl border space-y-4"
+            >
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  variant={activeFilter === 'all' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setActiveFilter('all')}
+                >
+                  All
+                </Button>
+                <Button
+                  variant={activeFilter === 'high-priority' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setActiveFilter('high-priority')}
+                >
+                  <AlertCircle className="h-4 w-4 mr-1" />
+                  High Priority
+                </Button>
+                <Button
+                  variant={activeFilter === 'today' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setActiveFilter('today')}
+                >
+                  <Calendar className="h-4 w-4 mr-1" />
+                  Today
+                </Button>
+                <Button
+                  variant={activeFilter === 'this-week' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setActiveFilter('this-week')}
+                >
+                  This Week
+                </Button>
+                <Button
+                  variant={activeFilter === 'overdue' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setActiveFilter('overdue')}
+                >
+                  <AlertCircle className="h-4 w-4 mr-1" />
+                  Overdue
+                </Button>
+                <Button
+                  variant={activeFilter === 'recurring' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setActiveFilter('recurring')}
+                >
+                  <RotateCcw className="h-4 w-4 mr-1" />
+                  Recurring
+                </Button>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Tabs Navigation */}
         <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as any)}>
-          <TabsList>
-            <TabsTrigger value="all">All</TabsTrigger>
-            <TabsTrigger value="upcoming">Upcoming</TabsTrigger>
-            <TabsTrigger value="overdue">Overdue</TabsTrigger>
-            <TabsTrigger value="completed">Completed</TabsTrigger>
+          <TabsList className="grid w-full grid-cols-4 h-12 bg-muted/50">
+            <TabsTrigger value="all" className="font-semibold">All Reminders</TabsTrigger>
+            <TabsTrigger value="upcoming" className="font-semibold">
+              <TrendingUp className="h-4 w-4 mr-2" />
+              Upcoming
+            </TabsTrigger>
+            <TabsTrigger value="overdue" className="font-semibold">
+              <AlertCircle className="h-4 w-4 mr-2" />
+              Overdue
+            </TabsTrigger>
+            <TabsTrigger value="completed" className="font-semibold">
+              <CheckCircle className="h-4 w-4 mr-2" />
+              Completed
+            </TabsTrigger>
           </TabsList>
         </Tabs>
       </motion.div>
 
-      {/* Reminders List */}
+      {/* Reminders Display */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.2 }}
       >
         {filteredReminders.length === 0 ? (
-          <div className="text-center py-16 border rounded-lg bg-muted/20">
-            <Calendar className="h-12 w-12 text-muted-foreground/50 mb-4 mx-auto" />
-            <p className="text-muted-foreground">
-              {searchQuery 
-                ? `No reminders found for "${searchQuery}"`
-                : activeTab === 'completed'
-                  ? 'No completed reminders yet'
-                  : activeTab === 'overdue'
-                    ? 'No overdue reminders'
-                    : activeTab === 'upcoming'
-                      ? 'No upcoming reminders'
-                      : 'No reminders yet. Create your first reminder!'
-              }
-            </p>
-            {!searchQuery && activeTab === 'all' && (
-              <Button 
-                variant="outline" 
-                className="mt-4"
-                onClick={() => setNewReminderDialogOpen(true)}
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="text-center py-20 border-2 border-dashed border-muted-foreground/20 rounded-2xl bg-gradient-to-br from-muted/10 to-muted/5"
+          >
+            <div className="flex flex-col items-center gap-4 max-w-md mx-auto">
+              <motion.div
+                initial={{ scale: 0 }}
+                animate={{ scale: 1 }}
+                transition={{ type: "spring", stiffness: 260, damping: 20, delay: 0.3 }}
+                className="p-4 bg-primary/10 rounded-2xl"
               >
-                <Plus className="h-4 w-4 mr-2" />
-                Create Your First Reminder
-              </Button>
-            )}
-          </div>
+                <Calendar className="h-16 w-16 text-primary/60" />
+              </motion.div>
+              <div className="space-y-2">
+                <h3 className="text-xl font-semibold">
+                  {searchQuery 
+                    ? `No reminders found for "${searchQuery}"`
+                    : activeTab === 'completed'
+                      ? 'No completed reminders yet'
+                      : activeTab === 'overdue'
+                        ? 'No overdue reminders'
+                        : activeTab === 'upcoming'
+                          ? 'No upcoming reminders'
+                          : 'No reminders yet'
+                  }
+                </h3>
+                <p className="text-muted-foreground">
+                  {searchQuery
+                    ? 'Try adjusting your search terms or clear filters'
+                    : activeTab === 'completed'
+                      ? 'Completed reminders will appear here'
+                      : 'Create your first reminder to get started!'
+                  }
+                </p>
+              </div>
+              {!searchQuery && activeTab === 'all' && (
+                <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} className="mt-2">
+                  <Button 
+                    variant="outline" 
+                    size="lg"
+                    className="h-12 px-6 border-2 border-primary/20 hover:border-primary/40"
+                    onClick={() => setNewReminderDialogOpen(true)}
+                  >
+                    <Plus className="h-5 w-5 mr-2" />
+                    Create Your First Reminder
+                  </Button>
+                </motion.div>
+              )}
+            </div>
+          </motion.div>
         ) : (
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          <motion.div
+            variants={containerVariants}
+            initial="hidden"
+            animate="visible"
+            className={cn(
+              viewMode === 'card' ? "grid gap-6 md:grid-cols-2 lg:grid-cols-3" :
+              viewMode === 'list' ? "space-y-3" :
+              "grid gap-3 md:grid-cols-2 lg:grid-cols-4"
+            )}
+          >
             <AnimatePresence mode="popLayout">
               {filteredReminders.map((reminder) => {
                 const spaceDetails = getSpaceDetails(reminder.space_id)
                 const IconComponent = getIconComponent(spaceDetails.icon)
                 const PriorityIcon = getPriorityIcon(reminder.priority || 'medium')
-                const isOverdue = isPast(new Date(reminder.reminder_time)) && reminder.status === 'pending'
+                const reminderDate = dayjs(reminder.reminder_time)
+                const isOverdue = reminderDate.isBefore(dayjs()) && reminder.status === 'pending'
+                const isSelected = selectedReminders.includes(reminder.id)
                 
                 return (
                   <motion.div
                     key={reminder.id}
-                    initial={{ opacity: 0, scale: 0.95 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    exit={{ opacity: 0, scale: 0.95 }}
-                    whileHover={{ scale: 1.02 }}
+                    variants={cardVariants}
+                    initial="hidden"
+                    animate="visible"
+                    exit="exit"
+                    whileHover={{ scale: 1.02, y: -4 }}
                     transition={{ duration: 0.2 }}
                   >
                     <Card className={cn(
-                      "overflow-hidden transition-all duration-200 hover:shadow-md",
-                      reminder.status === 'completed' && "border-green-500 bg-green-50/30",
-                      isOverdue && "border-red-500 bg-red-50/30"
-                    )}>
+                      "overflow-hidden transition-all duration-300 hover:shadow-xl border-0 shadow-lg cursor-pointer",
+                      getStatusColor(reminder.status, isOverdue),
+                      isSelected && "ring-2 ring-primary",
+                      isSelectionMode && "hover:ring-2 hover:ring-primary/50"
+                    )}
+                    onClick={() => {
+                      if (isSelectionMode) {
+                        if (isSelected) {
+                          setSelectedReminders(prev => prev.filter(id => id !== reminder.id))
+                        } else {
+                          setSelectedReminders(prev => [...prev, reminder.id])
+                        }
+                      }
+                    }}>
                       <CardHeader className="pb-3">
                         <div className="flex items-start justify-between">
-                          <div className="flex-1 space-y-1">
-                            <div className="flex items-center gap-2">
-                              <div className={cn("p-1.5 rounded-md", spaceDetails.color)}>
-                                <IconComponent className="h-3 w-3 text-white" />
+                          <div className="flex-1 space-y-2">
+                            <div className="flex items-center gap-3">
+                              {isSelectionMode && (
+                                <Checkbox checked={isSelected} />
+                              )}
+                              
+                              <div className={cn("p-2 rounded-lg shadow-sm", spaceDetails.color)}>
+                                <IconComponent className="h-4 w-4 text-white" />
                               </div>
-                              <CardTitle className="text-sm font-medium">
+                              
+                              <CardTitle className="text-lg font-semibold line-clamp-2">
                                 {reminder.title}
                               </CardTitle>
                             </div>
                             
                             {reminder.description && (
-                              <p className="text-xs text-muted-foreground">
+                              <p className="text-sm text-muted-foreground line-clamp-2 ml-11">
                                 {reminder.description}
                               </p>
                             )}
+
+                            {reminder.location && (
+                              <div className="flex items-center gap-1 text-xs text-muted-foreground ml-11">
+                                <MapPin className="h-3 w-3" />
+                                <span>{reminder.location}</span>
+                              </div>
+                            )}
+
+                            {reminder.tags && reminder.tags.length > 0 && (
+                              <div className="flex flex-wrap gap-1 ml-11">
+                                {reminder.tags.slice(0, 3).map((tag, index) => (
+                                  <Badge key={index} variant="outline" className="text-xs">
+                                    #{tag}
+                                  </Badge>
+                                ))}
+                                {reminder.tags.length > 3 && (
+                                  <Badge variant="outline" className="text-xs">
+                                    +{reminder.tags.length - 3}
+                                  </Badge>
+                                )}
+                              </div>
+                            )}
                           </div>
                           
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="icon" className="h-8 w-8">
-                                <MoreVertical className="h-4 w-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              {reminder.status === 'pending' && (
-                                <DropdownMenuItem onClick={() => handleCompleteReminder(reminder.id)}>
-                                  <CheckCircle className="h-4 w-4 mr-2" />
-                                  Mark Complete
+                          {!isSelectionMode && (
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+                                <Button variant="ghost" size="icon" className="h-8 w-8 bg-white/60 hover:bg-white/80 backdrop-blur-sm">
+                                  <MoreVertical className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end" className="w-48">
+                                {reminder.status === 'pending' && (
+                                  <DropdownMenuItem onClick={(e) => {
+                                    e.stopPropagation()
+                                    handleCompleteReminder(reminder.id)
+                                  }}>
+                                    <CheckCircle className="h-4 w-4 mr-2" />
+                                    Mark Complete
+                                  </DropdownMenuItem>
+                                )}
+                                <DropdownMenuItem onClick={(e) => {
+                                  e.stopPropagation()
+                                  setEditingReminder(reminder)
+                                }}>
+                                  <Edit className="h-4 w-4 mr-2" />
+                                  Edit Reminder
                                 </DropdownMenuItem>
-                              )}
-                              <DropdownMenuItem 
-                                onClick={() => handleDismissReminder(reminder.id)}
-                                className="text-red-600"
-                              >
-                                <Trash2 className="h-4 w-4 mr-2" />
-                                Delete
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
+                                <DropdownMenuItem onClick={(e) => {
+                                  e.stopPropagation()
+                                  shareReminder(reminder)
+                                }}>
+                                  <Share className="h-4 w-4 mr-2" />
+                                  Share
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem 
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    handleDismissReminder(reminder.id)
+                                  }}
+                                  className="text-red-600"
+                                >
+                                  <Trash2 className="h-4 w-4 mr-2" />
+                                  Delete
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          )}
                         </div>
                       </CardHeader>
                       
                       <CardContent className="pt-0">
-                        <div className="space-y-2">
-                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                            <Clock className="h-3 w-3" />
-                            <span className={isOverdue ? "text-red-600" : ""}>
+                        <div className="space-y-3">
+                          <div className="flex items-center gap-2 text-sm">
+                            <Clock className="h-4 w-4 text-muted-foreground" />
+                            <span className={cn(
+                              "font-medium",
+                              isOverdue ? "text-red-600" : "text-muted-foreground"
+                            )}>
                               {formatReminderTime(reminder.reminder_time)}
                             </span>
                           </div>
@@ -732,7 +1474,7 @@ export default function Reminders() {
                             <div className="flex items-center gap-2">
                               <Badge 
                                 variant="outline" 
-                                className={cn("text-xs", getPriorityColor(reminder.priority || 'medium'))}
+                                className={cn("text-xs font-medium", getPriorityColor(reminder.priority || 'medium'))}
                               >
                                 <PriorityIcon className="h-3 w-3 mr-1" />
                                 {reminder.priority || 'medium'}
@@ -740,14 +1482,18 @@ export default function Reminders() {
                               
                               {reminder.repeat_frequency !== 'none' && (
                                 <Badge variant="secondary" className="text-xs">
-                                  <Bell className="h-3 w-3 mr-1" />
+                                  <RotateCcw className="h-3 w-3 mr-1" />
                                   {reminder.repeat_frequency}
                                 </Badge>
                               )}
                             </div>
                             
                             {reminder.status === 'completed' && (
-                              <CheckCircle className="h-4 w-4 text-green-500" />
+                              <CheckCircle className="h-5 w-5 text-green-500" />
+                            )}
+                            
+                            {isOverdue && reminder.status === 'pending' && (
+                              <AlertCircle className="h-5 w-5 text-red-500" />
                             )}
                           </div>
                         </div>
@@ -757,9 +1503,102 @@ export default function Reminders() {
                 )
               })}
             </AnimatePresence>
-          </div>
+          </motion.div>
         )}
       </motion.div>
+
+      {/* Edit Reminder Dialog */}
+      {editingReminder && (
+        <Dialog open={!!editingReminder} onOpenChange={() => setEditingReminder(null)}>
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="text-2xl flex items-center gap-3">
+                <div className="p-2 bg-primary/20 rounded-lg">
+                  <Edit className="h-6 w-6 text-primary" />
+                </div>
+                Edit Reminder
+              </DialogTitle>
+            </DialogHeader>
+            
+            <div className="space-y-6 py-4">
+              <Input
+                value={editingReminder.title}
+                onChange={(e) => setEditingReminder({ ...editingReminder, title: e.target.value })}
+                placeholder="Reminder title..."
+                className="h-12 text-lg"
+              />
+              
+              <Textarea
+                value={editingReminder.description || ''}
+                onChange={(e) => setEditingReminder({ ...editingReminder, description: e.target.value })}
+                placeholder="Description..."
+                rows={3}
+              />
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Due Date & Time</Label>
+                  <Input
+                    type="datetime-local"
+                    value={editingReminder.reminder_time ? dayjs(editingReminder.reminder_time).format('YYYY-MM-DDTHH:mm') : ''}
+                    onChange={(e) => setEditingReminder({ 
+                      ...editingReminder, 
+                      reminder_time: e.target.value ? dayjs(e.target.value).toISOString() : ''
+                    })}
+                    className="h-12"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Priority</Label>
+                  <Select
+                    value={editingReminder.priority || 'medium'}
+                    onValueChange={(value: Priority) => setEditingReminder({ ...editingReminder, priority: value })}
+                  >
+                    <SelectTrigger className="h-12">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="low">Low</SelectItem>
+                      <SelectItem value="medium">Medium</SelectItem>
+                      <SelectItem value="high">High</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <Input
+                value={editingReminder.location || ''}
+                onChange={(e) => setEditingReminder({ ...editingReminder, location: e.target.value })}
+                placeholder="Location (optional)..."
+                className="h-12"
+              />
+            </div>
+            
+            <DialogFooter className="gap-3">
+              <Button variant="outline" onClick={() => setEditingReminder(null)} className="h-10">
+                Cancel
+              </Button>
+              <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+                <Button onClick={() => {
+                  if (editingReminder) {
+                    handleUpdateReminder(editingReminder.id, {
+                      title: editingReminder.title,
+                      description: editingReminder.description,
+                      reminder_time: editingReminder.reminder_time,
+                      priority: editingReminder.priority,
+                      location: editingReminder.location
+                    })
+                    setEditingReminder(null)
+                  }
+                }} className="h-10 px-6">
+                  Save Changes
+                </Button>
+              </motion.div>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   )
 }
