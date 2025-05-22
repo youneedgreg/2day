@@ -20,7 +20,7 @@ import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu"
 import { Progress } from "@/components/ui/progress"
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerFooter } from "@/components/ui/drawer"
 import { cn } from "@/lib/utils"
@@ -1057,7 +1057,7 @@ export default function TodoList() {
                                         </Badge>
                                       )}
                                       
-                                      {todo.notes.length > 0 && (
+                                      {todo.notes && todo.notes.length > 0 && (
                                         <Badge variant="outline" className="text-xs px-2 py-0.5 flex items-center gap-1 bg-blue-500/10 text-blue-600 border-blue-500/20">
                                           <AlignLeft className="h-3 w-3" />
                                           {todo.notes.length}
