@@ -65,99 +65,6 @@ type TodoTimer = {
   updated_at: string
 }
 
-// Mock data
-const mockTodos: TodoWithRelations[] = [
-  {
-    id: '1',
-    title: 'Complete project proposal',
-    status: 'pending',
-    priority: 'high',
-    description: 'Write and submit the Q4 project proposal',
-    due_date: '2024-12-01',
-    user_id: 'user1',
-    parent_id: null,
-    is_expanded: true,
-    created_at: '2024-11-20T10:00:00Z',
-    updated_at: '2024-11-20T10:00:00Z',
-    children: [
-      {
-        id: '2',
-        title: 'Research market trends',
-        status: 'completed',
-        priority: 'medium',
-        description: null,
-        due_date: null,
-        user_id: 'user1',
-        parent_id: '1',
-        is_expanded: false,
-        created_at: '2024-11-20T10:30:00Z',
-        updated_at: '2024-11-20T10:30:00Z',
-        children: [],
-        notes: []
-      }
-    ],
-    notes: [
-      {
-        id: 'note1',
-        content: 'Remember to include budget analysis',
-        created_at: '2024-11-20T11:00:00Z'
-      }
-    ],
-    timer: {
-      id: 'timer1',
-      todo_id: '1',
-      duration_minutes: 45,
-      start_time: null,
-      paused_time_remaining: null,
-      is_running: false,
-      completed: false,
-      created_at: '2024-11-20T10:00:00Z',
-      updated_at: '2024-11-20T10:00:00Z'
-    }
-  },
-  {
-    id: '3',
-    title: 'Exercise routine',
-    status: 'pending',
-    priority: 'medium',
-    description: 'Morning workout session',
-    due_date: null,
-    user_id: 'user1',
-    parent_id: null,
-    is_expanded: false,
-    created_at: '2024-11-20T07:00:00Z',
-    updated_at: '2024-11-20T07:00:00Z',
-    children: [],
-    notes: [],
-    timer: {
-      id: 'timer2',
-      todo_id: '3',
-      duration_minutes: 30,
-      start_time: new Date(Date.now() - 10 * 60 * 1000).toISOString(),
-      paused_time_remaining: null,
-      is_running: true,
-      completed: false,
-      created_at: '2024-11-20T07:00:00Z',
-      updated_at: '2024-11-20T07:00:00Z'
-    }
-  },
-  {
-    id: '4',
-    title: 'Review quarterly reports',
-    status: 'completed',
-    priority: 'high',
-    description: null,
-    due_date: '2024-11-19',
-    user_id: 'user1',
-    parent_id: null,
-    is_expanded: false,
-    created_at: '2024-11-19T09:00:00Z',
-    updated_at: '2024-11-19T16:00:00Z',
-    children: [],
-    notes: []
-  }
-]
-
 // Format time function (mm:ss)
 const formatTime = (timeInSeconds: number): string => {
   const minutes = Math.floor(timeInSeconds / 60)
@@ -256,9 +163,11 @@ export default function TodoList() {
             hasActiveTimers = true
           } else if (updated[todoId] === 0) {
             // Timer completed
-            const todo = findTodoById(todoId)
+            const todo = todos.find(t => t.id === todoId)
             if (todo) {
-              handleTimerComplete(todoId, todo.title)
+              // Handle timer completion
+              setActiveTimerId(null)
+              toast.success(`Timer completed for: ${todo.title}`)
             }
             delete updated[todoId]
           }
@@ -391,7 +300,6 @@ export default function TodoList() {
       console.error('Error deleting note:', error)
       toast.error('Failed to delete note')
     }
-  }
 
   const handleAddTimer = async (todoId: string) => {
     try {
