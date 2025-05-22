@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -13,8 +13,8 @@ import { Switch } from "@/components/ui/switch"
 import { Badge } from "@/components/ui/badge"
 import { 
   BarChart, PieChart, TrendingUp, Award, Target, Zap, CheckSquare, Bell, 
-  Plus, Edit, Trash2, Move, Settings, Save, Calendar, Clock, 
-  ArrowUp, ArrowDown, Loader2, Sparkles, Trophy, TrendingDown, Activity
+  Plus, Edit, Trash2, Settings, Save, Clock, 
+  ArrowUp, ArrowDown, Loader2, Sparkles, Trophy, Activity
 } from "lucide-react"
 import { useAuth } from '@/hooks/useAuth'
 import { getHabits, type HabitWithCompletions } from '@/lib/utils/database/habits'
@@ -22,21 +22,28 @@ import { getTodos, type TodoWithRelations } from '@/lib/utils/database/todos'
 import { getReminders } from '@/lib/utils/database/reminders'
 import { getNotes } from '@/lib/utils/database/notes'
 import { Database } from '@/lib/types/database'
-import { 
-  format, 
-  isToday, 
-  startOfWeek, 
-  endOfWeek, 
-  startOfMonth, 
-  endOfMonth,
-  subDays,
-  subWeeks,
-  subMonths,
-  isWithinInterval,
-  parseISO,
-  differenceInDays
-} from 'date-fns'
+import dayjs from 'dayjs'
+import utc from 'dayjs/plugin/utc'
+import timezone from 'dayjs/plugin/timezone'
+import isSameOrAfter from 'dayjs/plugin/isSameOrAfter'
+import isSameOrBefore from 'dayjs/plugin/isSameOrBefore'
+import weekOfYear from 'dayjs/plugin/weekOfYear'
+import relativeTime from 'dayjs/plugin/relativeTime'
+import isToday from 'dayjs/plugin/isToday'
+import isTomorrow from 'dayjs/plugin/isTomorrow'
+import customParseFormat from 'dayjs/plugin/customParseFormat'
 import { toast } from 'sonner'
+
+// Initialize dayjs plugins
+dayjs.extend(utc)
+dayjs.extend(timezone)
+dayjs.extend(isSameOrAfter)
+dayjs.extend(isSameOrBefore)
+dayjs.extend(weekOfYear)
+dayjs.extend(relativeTime)
+dayjs.extend(isToday)
+dayjs.extend(isTomorrow)
+dayjs.extend(customParseFormat)
 
 // Types from database
 type Reminder = Database['public']['Tables']['reminders']['Row']
@@ -96,7 +103,7 @@ const parseHabitMetadata = (description: string | null) => {
 
 // Helper function to check if habit is completed today
 const isHabitCompletedToday = (habit: HabitWithCompletions): boolean => {
-  const today = format(new Date(), 'yyyy-MM-dd')
+  const today = dayjs().format('YYYY-MM-DD')
   return habit.habit_completions.some(completion => 
     completion.completed_at.split('T')[0] === today
   )
@@ -112,14 +119,13 @@ const calculateHabitStreak = (habit: HabitWithCompletions): number => {
   if (sortedCompletions.length === 0) return 0
 
   let streak = 0
-  const today = new Date()
+  const today = dayjs()
   
   for (let i = 0; i < sortedCompletions.length; i++) {
-    const completionDate = new Date(sortedCompletions[i])
-    const expectedDate = new Date(today)
-    expectedDate.setDate(today.getDate() - i)
+    const completionDate = dayjs(sortedCompletions[i])
+    const expectedDate = today.subtract(i, 'day')
     
-    if (format(completionDate, 'yyyy-MM-dd') === format(expectedDate, 'yyyy-MM-dd')) {
+    if (completionDate.isSame(expectedDate, 'day')) {
       streak++
     } else {
       break
@@ -147,35 +153,8 @@ export default function Dashboard() {
   const [timeframe, setTimeframe] = useState('daily')
   const [isConfigOpen, setIsConfigOpen] = useState(false)
 
-  // Load data on component mount
-  useEffect(() => {
-    setMounted(true)
-    if (user) {
-      loadData()
-    }
-  }, [user])
-
-  // Load saved card configuration
-  useEffect(() => {
-    if (mounted) {
-      const savedCards = localStorage.getItem('dashboardCards')
-      if (savedCards) {
-        setCards(JSON.parse(savedCards))
-      } else {
-        setCards(defaultCards)
-      }
-    }
-  }, [mounted])
-
-  // Save card configuration when it changes
-  useEffect(() => {
-    if (cards.length > 0 && mounted) {
-      localStorage.setItem('dashboardCards', JSON.stringify(cards))
-    }
-  }, [cards, mounted])
-
   // Load all data from database
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     if (!user) return
     
     try {
@@ -199,15 +178,47 @@ export default function Dashboard() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [user])
+
+  // Load data on component mount
+  useEffect(() => {
+    setMounted(true)
+    if (user) {
+      loadData()
+    }
+  }, [user, loadData])
+
+  // Load saved card configuration
+  useEffect(() => {
+    if (mounted) {
+      const savedCards = localStorage.getItem('dashboardCards')
+      if (savedCards) {
+        setCards(JSON.parse(savedCards))
+      } else {
+        setCards(defaultCards)
+      }
+    }
+  }, [mounted])
+
+  // Save card configuration when it changes
+  useEffect(() => {
+    if (cards.length > 0 && mounted) {
+      localStorage.setItem('dashboardCards', JSON.stringify(cards))
+    }
+  }, [cards, mounted])
 
   if (!mounted || loading) {
     return (
       <div className="flex justify-center items-center py-20">
-        <div className="flex items-center gap-2">
-          <Loader2 className="h-6 w-6 animate-spin" />
-          <span>Loading dashboard...</span>
-        </div>
+        <motion.div 
+          className="flex items-center gap-3 p-6 rounded-xl bg-gradient-to-r from-primary/10 to-primary/5"
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.3 }}
+        >
+          <Loader2 className="h-6 w-6 animate-spin text-primary" />
+          <span className="font-medium">Loading dashboard...</span>
+        </motion.div>
       </div>
     )
   }
@@ -215,9 +226,9 @@ export default function Dashboard() {
   // Calculate statistics
   const todaysTodos = todos.filter(todo => {
     if (todo.due_date) {
-      return isToday(parseISO(todo.due_date))
+      return dayjs(todo.due_date).isToday()
     }
-    return isToday(parseISO(todo.created_at))
+    return dayjs(todo.created_at).isToday()
   })
   
   const completedTodaysTodos = todaysTodos.filter(todo => todo.status === 'completed').length
@@ -227,7 +238,7 @@ export default function Dashboard() {
   const todaysHabits = habits.filter(habit => {
     const metadata = parseHabitMetadata(habit.description)
     if (metadata.frequency_days.length === 0) return true // Daily habit
-    const dayOfWeek = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][new Date().getDay()]
+    const dayOfWeek = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][dayjs().day()]
     return metadata.frequency_days.includes(dayOfWeek)
   })
   
@@ -239,13 +250,14 @@ export default function Dashboard() {
   const pendingReminders = reminders.filter(r => r.status === 'pending').length
 
   const cardVariants = {
-    hidden: { opacity: 0, y: 20 },
+    hidden: { opacity: 0, y: 20, scale: 0.95 },
     visible: (i: number) => ({
       opacity: 1,
       y: 0,
+      scale: 1,
       transition: {
-        delay: i * 0.05,
-        duration: 0.4,
+        delay: i * 0.08,
+        duration: 0.5,
         ease: "easeOut",
       },
     }),
@@ -319,28 +331,41 @@ export default function Dashboard() {
     switch (card.type) {
       case 'habits':
         return (
-          <Card className="overflow-hidden border-0 shadow-sm bg-gradient-to-br from-blue-50 to-blue-100/50 dark:from-blue-950/30 dark:to-blue-900/20">
-            <CardHeader className="pb-2 px-4 py-3">
-              <CardTitle className="text-sm font-medium flex items-center gap-2">
-                <div className="p-1.5 rounded-lg bg-blue-500/10">
+          <Card className="overflow-hidden border-0 shadow-lg bg-gradient-to-br from-blue-50 via-blue-50 to-blue-100 dark:from-blue-950/40 dark:via-blue-950/30 dark:to-blue-900/30 hover:shadow-xl transition-all duration-300">
+            <CardHeader className="pb-3 px-6 py-4 bg-gradient-to-r from-blue-500/10 to-blue-400/10">
+              <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                <div className="p-2 rounded-xl bg-blue-500/20 shadow-sm">
                   <IconComponent className="h-4 w-4 text-blue-600 dark:text-blue-400" />
                 </div>
                 {card.title}
               </CardTitle>
             </CardHeader>
-            <CardContent className="px-4 pb-4 pt-0">
-              <div className="flex flex-col items-center justify-center">
+            <CardContent className="px-6 pb-6 pt-2">
+              <div className="flex flex-col items-center justify-center space-y-2">
                 <div className="relative">
-                  <div className="text-3xl font-bold text-blue-700 dark:text-blue-300">{habitCompletionRate}%</div>
+                  <div className="text-4xl font-bold text-blue-700 dark:text-blue-300">{habitCompletionRate}%</div>
                   {habitCompletionRate === 100 && totalTodaysHabits > 0 && (
-                    <Sparkles className="absolute -top-1 -right-1 h-4 w-4 text-yellow-500" />
+                    <motion.div
+                      initial={{ scale: 0 }}
+                      animate={{ scale: 1 }}
+                      className="absolute -top-2 -right-2"
+                    >
+                      <Sparkles className="h-5 w-5 text-yellow-500" />
+                    </motion.div>
                   )}
                 </div>
-                <p className="text-xs text-muted-foreground mt-1 text-center">
+                <p className="text-sm text-muted-foreground text-center font-medium">
                   {completedTodaysHabits}/{totalTodaysHabits} completed today
                 </p>
                 {totalTodaysHabits === 0 && (
-                  <Badge variant="outline" className="text-xs mt-2">No habits scheduled</Badge>
+                  <Badge variant="outline" className="text-xs mt-2 border-blue-200 text-blue-600">
+                    No habits scheduled
+                  </Badge>
+                )}
+                {habitCompletionRate === 100 && totalTodaysHabits > 0 && (
+                  <Badge className="text-xs mt-2 bg-gradient-to-r from-blue-500 to-blue-600 text-white">
+                    Perfect day! 🎉
+                  </Badge>
                 )}
               </div>
             </CardContent>
@@ -349,28 +374,41 @@ export default function Dashboard() {
       
       case 'tasks':
         return (
-          <Card className="overflow-hidden border-0 shadow-sm bg-gradient-to-br from-green-50 to-green-100/50 dark:from-green-950/30 dark:to-green-900/20">
-            <CardHeader className="pb-2 px-4 py-3">
-              <CardTitle className="text-sm font-medium flex items-center gap-2">
-                <div className="p-1.5 rounded-lg bg-green-500/10">
+          <Card className="overflow-hidden border-0 shadow-lg bg-gradient-to-br from-green-50 via-green-50 to-green-100 dark:from-green-950/40 dark:via-green-950/30 dark:to-green-900/30 hover:shadow-xl transition-all duration-300">
+            <CardHeader className="pb-3 px-6 py-4 bg-gradient-to-r from-green-500/10 to-green-400/10">
+              <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                <div className="p-2 rounded-xl bg-green-500/20 shadow-sm">
                   <IconComponent className="h-4 w-4 text-green-600 dark:text-green-400" />
                 </div>
                 {card.title}
               </CardTitle>
             </CardHeader>
-            <CardContent className="px-4 pb-4 pt-0">
-              <div className="flex flex-col items-center justify-center">
+            <CardContent className="px-6 pb-6 pt-2">
+              <div className="flex flex-col items-center justify-center space-y-2">
                 <div className="relative">
-                  <div className="text-3xl font-bold text-green-700 dark:text-green-300">{todoCompletionRate}%</div>
+                  <div className="text-4xl font-bold text-green-700 dark:text-green-300">{todoCompletionRate}%</div>
                   {todoCompletionRate === 100 && totalTodaysTodos > 0 && (
-                    <Trophy className="absolute -top-1 -right-1 h-4 w-4 text-yellow-500" />
+                    <motion.div
+                      initial={{ scale: 0 }}
+                      animate={{ scale: 1 }}
+                      className="absolute -top-2 -right-2"
+                    >
+                      <Trophy className="h-5 w-5 text-yellow-500" />
+                    </motion.div>
                   )}
                 </div>
-                <p className="text-xs text-muted-foreground mt-1 text-center">
+                <p className="text-sm text-muted-foreground text-center font-medium">
                   {completedTodaysTodos}/{totalTodaysTodos} done today
                 </p>
                 {totalTodaysTodos === 0 && (
-                  <Badge variant="outline" className="text-xs mt-2">No tasks for today</Badge>
+                  <Badge variant="outline" className="text-xs mt-2 border-green-200 text-green-600">
+                    No tasks for today
+                  </Badge>
+                )}
+                {todoCompletionRate === 100 && totalTodaysTodos > 0 && (
+                  <Badge className="text-xs mt-2 bg-gradient-to-r from-green-500 to-green-600 text-white">
+                    All done! 🏆
+                  </Badge>
                 )}
               </div>
             </CardContent>
@@ -379,30 +417,41 @@ export default function Dashboard() {
         
       case 'streak':
         return (
-          <Card className="overflow-hidden border-0 shadow-sm bg-gradient-to-br from-purple-50 to-purple-100/50 dark:from-purple-950/30 dark:to-purple-900/20">
-            <CardHeader className="pb-2 px-4 py-3">
-              <CardTitle className="text-sm font-medium flex items-center gap-2">
-                <div className="p-1.5 rounded-lg bg-purple-500/10">
+          <Card className="overflow-hidden border-0 shadow-lg bg-gradient-to-br from-purple-50 via-purple-50 to-purple-100 dark:from-purple-950/40 dark:via-purple-950/30 dark:to-purple-900/30 hover:shadow-xl transition-all duration-300">
+            <CardHeader className="pb-3 px-6 py-4 bg-gradient-to-r from-purple-500/10 to-purple-400/10">
+              <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                <div className="p-2 rounded-xl bg-purple-500/20 shadow-sm">
                   <IconComponent className="h-4 w-4 text-purple-600 dark:text-purple-400" />
                 </div>
                 {card.title}
               </CardTitle>
             </CardHeader>
-            <CardContent className="px-4 pb-4 pt-0">
-              <div className="flex flex-col items-center justify-center">
+            <CardContent className="px-6 pb-6 pt-2">
+              <div className="flex flex-col items-center justify-center space-y-2">
                 <div className="relative">
-                  <div className="text-3xl font-bold text-purple-700 dark:text-purple-300">{bestStreak}</div>
+                  <div className="text-4xl font-bold text-purple-700 dark:text-purple-300">{bestStreak}</div>
                   {bestStreak >= 7 && (
-                    <div className="absolute -top-1 -right-1 flex">
-                      <Zap className="h-4 w-4 text-orange-500" />
-                    </div>
+                    <motion.div
+                      initial={{ scale: 0 }}
+                      animate={{ scale: 1 }}
+                      className="absolute -top-2 -right-2"
+                    >
+                      <Zap className="h-5 w-5 text-orange-500" />
+                    </motion.div>
                   )}
                 </div>
-                <p className="text-xs text-muted-foreground mt-1 text-center">
+                <p className="text-sm text-muted-foreground text-center font-medium">
                   days in a row
                 </p>
                 {bestStreak >= 30 && (
-                  <Badge variant="secondary" className="text-xs mt-2">🔥 On fire!</Badge>
+                  <Badge className="text-xs mt-2 bg-gradient-to-r from-orange-500 to-red-500 text-white">
+                    🔥 On fire!
+                  </Badge>
+                )}
+                {bestStreak >= 7 && bestStreak < 30 && (
+                  <Badge variant="secondary" className="text-xs mt-2 bg-purple-100 text-purple-700">
+                    Great streak! ⚡
+                  </Badge>
                 )}
               </div>
             </CardContent>
@@ -411,28 +460,39 @@ export default function Dashboard() {
         
       case 'reminders':
         return (
-          <Card className="overflow-hidden border-0 shadow-sm bg-gradient-to-br from-amber-50 to-amber-100/50 dark:from-amber-950/30 dark:to-amber-900/20">
-            <CardHeader className="pb-2 px-4 py-3">
-              <CardTitle className="text-sm font-medium flex items-center gap-2">
-                <div className="p-1.5 rounded-lg bg-amber-500/10">
+          <Card className="overflow-hidden border-0 shadow-lg bg-gradient-to-br from-amber-50 via-amber-50 to-amber-100 dark:from-amber-950/40 dark:via-amber-950/30 dark:to-amber-900/30 hover:shadow-xl transition-all duration-300">
+            <CardHeader className="pb-3 px-6 py-4 bg-gradient-to-r from-amber-500/10 to-amber-400/10">
+              <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                <div className="p-2 rounded-xl bg-amber-500/20 shadow-sm">
                   <IconComponent className="h-4 w-4 text-amber-600 dark:text-amber-400" />
                 </div>
                 {card.title}
               </CardTitle>
             </CardHeader>
-            <CardContent className="px-4 pb-4 pt-0">
-              <div className="flex flex-col items-center justify-center">
+            <CardContent className="px-6 pb-6 pt-2">
+              <div className="flex flex-col items-center justify-center space-y-2">
                 <div className="relative">
-                  <div className="text-3xl font-bold text-amber-700 dark:text-amber-300">{pendingReminders}</div>
+                  <div className="text-4xl font-bold text-amber-700 dark:text-amber-300">{pendingReminders}</div>
                   {pendingReminders > 0 && (
-                    <div className="absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
+                    <motion.div
+                      animate={{ scale: [1, 1.2, 1] }}
+                      transition={{ repeat: Infinity, duration: 2 }}
+                      className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full"
+                    />
                   )}
                 </div>
-                <p className="text-xs text-muted-foreground mt-1 text-center">
+                <p className="text-sm text-muted-foreground text-center font-medium">
                   pending reminders
                 </p>
                 {pendingReminders === 0 && (
-                  <Badge variant="outline" className="text-xs mt-2">All caught up!</Badge>
+                  <Badge variant="outline" className="text-xs mt-2 border-green-200 text-green-600">
+                    All caught up! ✨
+                  </Badge>
+                )}
+                {pendingReminders > 5 && (
+                  <Badge variant="destructive" className="text-xs mt-2">
+                    Needs attention!
+                  </Badge>
                 )}
               </div>
             </CardContent>
@@ -441,27 +501,27 @@ export default function Dashboard() {
 
       case 'notes':
         const recentNotes = notes.filter(note => {
-          const daysSinceUpdate = differenceInDays(new Date(), parseISO(note.updated_at))
+          const daysSinceUpdate = dayjs().diff(dayjs(note.updated_at), 'day')
           return daysSinceUpdate <= 7
         }).length
 
         return (
-          <Card className="overflow-hidden border-0 shadow-sm bg-gradient-to-br from-indigo-50 to-indigo-100/50 dark:from-indigo-950/30 dark:to-indigo-900/20">
-            <CardHeader className="pb-2 px-4 py-3">
-              <CardTitle className="text-sm font-medium flex items-center gap-2">
-                <div className="p-1.5 rounded-lg bg-indigo-500/10">
+          <Card className="overflow-hidden border-0 shadow-lg bg-gradient-to-br from-indigo-50 via-indigo-50 to-indigo-100 dark:from-indigo-950/40 dark:via-indigo-950/30 dark:to-indigo-900/30 hover:shadow-xl transition-all duration-300">
+            <CardHeader className="pb-3 px-6 py-4 bg-gradient-to-r from-indigo-500/10 to-indigo-400/10">
+              <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                <div className="p-2 rounded-xl bg-indigo-500/20 shadow-sm">
                   <IconComponent className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
                 </div>
                 {card.title}
               </CardTitle>
             </CardHeader>
-            <CardContent className="px-4 pb-4 pt-0">
-              <div className="flex flex-col items-center justify-center">
-                <div className="text-3xl font-bold text-indigo-700 dark:text-indigo-300">{recentNotes}</div>
-                <p className="text-xs text-muted-foreground mt-1 text-center">
+            <CardContent className="px-6 pb-6 pt-2">
+              <div className="flex flex-col items-center justify-center space-y-2">
+                <div className="text-4xl font-bold text-indigo-700 dark:text-indigo-300">{recentNotes}</div>
+                <p className="text-sm text-muted-foreground text-center font-medium">
                   notes this week
                 </p>
-                <p className="text-xs text-muted-foreground/70 mt-0.5">
+                <p className="text-xs text-muted-foreground/70">
                   {notes.length} total
                 </p>
               </div>
@@ -472,16 +532,16 @@ export default function Dashboard() {
       case 'habitChart':
         // Get date range based on timeframe
         const getDateRange = () => {
-          const now = new Date()
+          const now = dayjs()
           switch (timeframe) {
             case 'daily':
-              return { start: subDays(now, 7), end: now, label: 'Last 7 days' }
+              return { start: now.subtract(7, 'day'), end: now, label: 'Last 7 days' }
             case 'weekly':
-              return { start: subWeeks(now, 4), end: now, label: 'Last 4 weeks' }
+              return { start: now.subtract(4, 'week'), end: now, label: 'Last 4 weeks' }
             case 'monthly':
-              return { start: subMonths(now, 3), end: now, label: 'Last 3 months' }
+              return { start: now.subtract(3, 'month'), end: now, label: 'Last 3 months' }
             default:
-              return { start: subDays(now, 7), end: now, label: 'Last 7 days' }
+              return { start: now.subtract(7, 'day'), end: now, label: 'Last 7 days' }
           }
         }
 
@@ -502,10 +562,10 @@ export default function Dashboard() {
           const metadata = parseHabitMetadata(habit.description)
           
           habit.habit_completions.forEach(completion => {
-            const completionDate = parseISO(completion.completed_at)
+            const completionDate = dayjs(completion.completed_at)
             
-            if (isWithinInterval(completionDate, { start: startDate, end: endDate })) {
-              const dayOfWeek = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][completionDate.getDay()]
+            if (completionDate.isSameOrAfter(startDate, 'day') && completionDate.isSameOrBefore(endDate, 'day')) {
+              const dayOfWeek = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][completionDate.day()]
               
               // Check if habit was scheduled for this day
               if (metadata.frequency_days.length === 0 || metadata.frequency_days.includes(dayOfWeek)) {
@@ -527,50 +587,53 @@ export default function Dashboard() {
         chartData.sort((a, b) => orderedDays.indexOf(a.day) - orderedDays.indexOf(b.day))
 
         return (
-          <Card className="overflow-hidden border-0 shadow-sm">
-            <CardHeader className="pb-3 px-4 py-4">
-              <CardTitle className="text-base font-medium flex items-center gap-2">
-                <div className="p-1.5 rounded-lg bg-primary/10">
-                  <IconComponent className="h-4 w-4 text-primary" />
+          <Card className="overflow-hidden border-0 shadow-lg hover:shadow-xl transition-all duration-300">
+            <CardHeader className="pb-4 px-6 py-5 bg-gradient-to-r from-primary/5 to-primary/10">
+              <CardTitle className="text-lg font-semibold flex items-center gap-3">
+                <div className="p-2 rounded-xl bg-primary/20 shadow-sm">
+                  <IconComponent className="h-5 w-5 text-primary" />
                 </div>
                 {card.title}
               </CardTitle>
             </CardHeader>
-            <CardContent className="px-4 py-3">
+            <CardContent className="px-6 py-6">
               {habits.length === 0 ? (
-                <div className="h-48 bg-muted/30 rounded-lg flex flex-col items-center justify-center">
-                  <TrendingUp className="h-12 w-12 text-muted-foreground/40 mb-3" />
-                  <p className="text-sm text-muted-foreground text-center">
+                <div className="h-56 bg-gradient-to-br from-muted/30 to-muted/10 rounded-xl flex flex-col items-center justify-center">
+                  <TrendingUp className="h-16 w-16 text-muted-foreground/40 mb-4" />
+                  <h4 className="font-medium text-muted-foreground mb-2">No habit data yet</h4>
+                  <p className="text-sm text-muted-foreground/70 text-center">
                     Add some habits to see your trends
                   </p>
                 </div>
               ) : (
-                <div className="h-48">
-                  <div className="flex items-end h-32 gap-2 mt-4">
+                <div className="h-56">
+                  <div className="flex items-end h-40 gap-3 mt-4">
                     {chartData.map((item) => (
                       <div key={item.day} className="flex-1 flex flex-col items-center group">
                         <div 
-                          className="w-full bg-primary/10 rounded-t-md relative transition-all duration-300 group-hover:bg-primary/20"
+                          className="w-full bg-primary/10 rounded-t-lg relative transition-all duration-500 group-hover:bg-primary/20"
                           style={{ 
-                            height: `${Math.max(8, item.rate * 0.8)}%`,
-                            minHeight: item.total > 0 ? '8px' : '0'
+                            height: `${Math.max(12, item.rate * 1.2)}%`,
+                            minHeight: item.total > 0 ? '12px' : '0'
                           }}
                         >
                           {item.total > 0 && (
-                            <div 
-                              className="absolute inset-0 bg-primary rounded-t-md transition-all duration-300" 
-                              style={{ height: `${item.rate}%` }} 
+                            <motion.div 
+                              initial={{ height: 0 }}
+                              animate={{ height: `${item.rate}%` }}
+                              transition={{ duration: 1, delay: 0.2 }}
+                              className="absolute inset-0 bg-gradient-to-t from-primary to-primary/80 rounded-t-lg" 
                             />
                           )}
-                          <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-black/80 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
+                          <div className="absolute -top-12 left-1/2 -translate-x-1/2 bg-black/90 text-white text-xs px-3 py-2 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10 shadow-lg">
                             {item.rate}% ({item.completed}/{item.total})
                           </div>
                         </div>
-                        <div className="text-xs font-medium mt-2 text-muted-foreground">{item.day}</div>
+                        <div className="text-sm font-semibold mt-3 text-muted-foreground">{item.day}</div>
                       </div>
                     ))}
                   </div>
-                  <div className="mt-6 text-xs text-center text-muted-foreground">
+                  <div className="mt-8 text-sm text-center text-muted-foreground bg-muted/20 py-2 rounded-lg">
                     Completion rates by day • {periodLabel}
                   </div>
                 </div>
@@ -592,63 +655,64 @@ export default function Dashboard() {
         const totalTasks = todos.length
 
         return (
-          <Card className="overflow-hidden border-0 shadow-sm">
-            <CardHeader className="pb-3 px-4 py-4">
-              <CardTitle className="text-base font-medium flex items-center gap-2">
-                <div className="p-1.5 rounded-lg bg-primary/10">
-                  <IconComponent className="h-4 w-4 text-primary" />
+          <Card className="overflow-hidden border-0 shadow-lg hover:shadow-xl transition-all duration-300">
+            <CardHeader className="pb-4 px-6 py-5 bg-gradient-to-r from-primary/5 to-primary/10">
+              <CardTitle className="text-lg font-semibold flex items-center gap-3">
+                <div className="p-2 rounded-xl bg-primary/20 shadow-sm">
+                  <IconComponent className="h-5 w-5 text-primary" />
                 </div>
                 {card.title}
               </CardTitle>
             </CardHeader>
-            <CardContent className="px-4 py-3">
+            <CardContent className="px-6 py-6">
               {todos.length === 0 ? (
-                <div className="h-48 bg-muted/30 rounded-lg flex flex-col items-center justify-center">
-                  <PieChart className="h-12 w-12 text-muted-foreground/40 mb-3" />
-                  <p className="text-sm text-muted-foreground text-center">
+                <div className="h-56 bg-gradient-to-br from-muted/30 to-muted/10 rounded-xl flex flex-col items-center justify-center">
+                  <PieChart className="h-16 w-16 text-muted-foreground/40 mb-4" />
+                  <h4 className="font-medium text-muted-foreground mb-2">No task data yet</h4>
+                  <p className="text-sm text-muted-foreground/70 text-center">
                     Add some tasks to see your overview
                   </p>
                 </div>
               ) : (
-                <div className="h-48 space-y-4">
+                <div className="h-56 space-y-6">
                   {/* Progress overview */}
-                  <div className="text-center">
-                    <div className="text-2xl font-bold">{Math.round((completedTasks / totalTasks) * 100)}%</div>
-                    <div className="text-sm text-muted-foreground">Overall completion</div>
+                  <div className="text-center bg-gradient-to-r from-primary/10 to-primary/5 p-4 rounded-xl">
+                    <div className="text-3xl font-bold text-primary">{Math.round((completedTasks / totalTasks) * 100)}%</div>
+                    <div className="text-sm text-muted-foreground font-medium">Overall completion</div>
                   </div>
 
                   {/* Priority breakdown */}
-                  <div className="space-y-2">
-                    <div className="text-xs font-medium text-muted-foreground">By Priority</div>
-                    <div className="grid grid-cols-2 gap-2 text-xs">
-                      <div className="flex items-center gap-2">
-                        <div className="w-2 h-2 bg-red-500 rounded-full"></div>
-                        <span>High: {tasksByPriority.high}</span>
+                  <div className="space-y-3">
+                    <div className="text-sm font-semibold text-muted-foreground">By Priority</div>
+                    <div className="grid grid-cols-2 gap-3 text-sm">
+                      <div className="flex items-center gap-2 p-2 bg-red-50 dark:bg-red-950/20 rounded-lg">
+                        <div className="w-3 h-3 bg-red-500 rounded-full shadow-sm"></div>
+                        <span className="font-medium">High: {tasksByPriority.high}</span>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <div className="w-2 h-2 bg-amber-500 rounded-full"></div>
-                        <span>Medium: {tasksByPriority.medium}</span>
+                      <div className="flex items-center gap-2 p-2 bg-amber-50 dark:bg-amber-950/20 rounded-lg">
+                        <div className="w-3 h-3 bg-amber-500 rounded-full shadow-sm"></div>
+                        <span className="font-medium">Medium: {tasksByPriority.medium}</span>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                        <span>Low: {tasksByPriority.low}</span>
+                      <div className="flex items-center gap-2 p-2 bg-green-50 dark:bg-green-950/20 rounded-lg">
+                        <div className="w-3 h-3 bg-green-500 rounded-full shadow-sm"></div>
+                        <span className="font-medium">Low: {tasksByPriority.low}</span>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <div className="w-2 h-2 bg-gray-400 rounded-full"></div>
-                        <span>None: {tasksByPriority.none}</span>
+                      <div className="flex items-center gap-2 p-2 bg-gray-50 dark:bg-gray-950/20 rounded-lg">
+                        <div className="w-3 h-3 bg-gray-400 rounded-full shadow-sm"></div>
+                        <span className="font-medium">None: {tasksByPriority.none}</span>
                       </div>
                     </div>
                   </div>
 
                   {/* Status breakdown */}
-                  <div className="flex justify-between text-xs">
-                    <div className="flex items-center gap-1">
-                      <CheckSquare className="h-3 w-3 text-green-500" />
-                      <span>{completedTasks} completed</span>
+                  <div className="flex justify-between text-sm bg-muted/20 p-3 rounded-lg">
+                    <div className="flex items-center gap-2">
+                      <CheckSquare className="h-4 w-4 text-green-500" />
+                      <span className="font-medium">{completedTasks} completed</span>
                     </div>
-                    <div className="flex items-center gap-1">
-                      <Clock className="h-3 w-3 text-amber-500" />
-                      <span>{pendingTasks} pending</span>
+                    <div className="flex items-center gap-2">
+                      <Clock className="h-4 w-4 text-amber-500" />
+                      <span className="font-medium">{pendingTasks} pending</span>
                     </div>
                   </div>
                 </div>
@@ -661,43 +725,55 @@ export default function Dashboard() {
         const todayCompletedHabits = completedTodaysHabits
         const todayCompletedTasks = completedTodaysTodos
         const recentNotesCount = notes.filter(note => {
-          const daysSinceUpdate = differenceInDays(new Date(), parseISO(note.updated_at))
+          const daysSinceUpdate = dayjs().diff(dayjs(note.updated_at), 'day')
           return daysSinceUpdate <= 1
         }).length
 
         return (
-          <Card className="overflow-hidden border-0 shadow-sm">
-            <CardHeader className="pb-3 px-4 py-4">
-              <CardTitle className="text-base font-medium flex items-center gap-2">
-                <div className="p-1.5 rounded-lg bg-primary/10">
-                  <IconComponent className="h-4 w-4 text-primary" />
+          <Card className="overflow-hidden border-0 shadow-lg hover:shadow-xl transition-all duration-300">
+            <CardHeader className="pb-4 px-6 py-5 bg-gradient-to-r from-primary/5 to-primary/10">
+              <CardTitle className="text-lg font-semibold flex items-center gap-3">
+                <div className="p-2 rounded-xl bg-primary/20 shadow-sm">
+                  <IconComponent className="h-5 w-5 text-primary" />
                 </div>
                 {card.title}
               </CardTitle>
             </CardHeader>
-            <CardContent className="px-4 py-3">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="text-center p-3 bg-gradient-to-br from-blue-50 to-blue-100/50 dark:from-blue-950/30 dark:to-blue-900/20 rounded-lg">
-                  <Target className="h-6 w-6 text-blue-600 mx-auto mb-2" />
-                  <div className="text-lg font-bold text-blue-700 dark:text-blue-300">{todayCompletedHabits}</div>
-                  <div className="text-xs text-muted-foreground">Habits completed</div>
-                </div>
+            <CardContent className="px-6 py-6">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <motion.div 
+                  className="text-center p-4 bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-950/40 dark:to-blue-900/30 rounded-xl shadow-sm"
+                  whileHover={{ scale: 1.02 }}
+                  transition={{ type: "spring", stiffness: 300 }}
+                >
+                  <Target className="h-8 w-8 text-blue-600 mx-auto mb-3" />
+                  <div className="text-2xl font-bold text-blue-700 dark:text-blue-300">{todayCompletedHabits}</div>
+                  <div className="text-sm text-muted-foreground font-medium">Habits completed</div>
+                </motion.div>
                 
-                <div className="text-center p-3 bg-gradient-to-br from-green-50 to-green-100/50 dark:from-green-950/30 dark:to-green-900/20 rounded-lg">
-                  <CheckSquare className="h-6 w-6 text-green-600 mx-auto mb-2" />
-                  <div className="text-lg font-bold text-green-700 dark:text-green-300">{todayCompletedTasks}</div>
-                  <div className="text-xs text-muted-foreground">Tasks finished</div>
-                </div>
+                <motion.div 
+                  className="text-center p-4 bg-gradient-to-br from-green-50 to-green-100 dark:from-green-950/40 dark:to-green-900/30 rounded-xl shadow-sm"
+                  whileHover={{ scale: 1.02 }}
+                  transition={{ type: "spring", stiffness: 300 }}
+                >
+                  <CheckSquare className="h-8 w-8 text-green-600 mx-auto mb-3" />
+                  <div className="text-2xl font-bold text-green-700 dark:text-green-300">{todayCompletedTasks}</div>
+                  <div className="text-sm text-muted-foreground font-medium">Tasks finished</div>
+                </motion.div>
                 
-                <div className="text-center p-3 bg-gradient-to-br from-purple-50 to-purple-100/50 dark:from-purple-950/30 dark:to-purple-900/20 rounded-lg">
-                  <Edit className="h-6 w-6 text-purple-600 mx-auto mb-2" />
-                  <div className="text-lg font-bold text-purple-700 dark:text-purple-300">{recentNotesCount}</div>
-                  <div className="text-xs text-muted-foreground">Notes today</div>
-                </div>
+                <motion.div 
+                  className="text-center p-4 bg-gradient-to-br from-purple-50 to-purple-100 dark:from-purple-950/40 dark:to-purple-900/30 rounded-xl shadow-sm"
+                  whileHover={{ scale: 1.02 }}
+                  transition={{ type: "spring", stiffness: 300 }}
+                >
+                  <Edit className="h-8 w-8 text-purple-600 mx-auto mb-3" />
+                  <div className="text-2xl font-bold text-purple-700 dark:text-purple-300">{recentNotesCount}</div>
+                  <div className="text-sm text-muted-foreground font-medium">Notes today</div>
+                </motion.div>
               </div>
               
-              <div className="mt-4 pt-4 border-t text-center">
-                <div className="text-sm text-muted-foreground">
+              <div className="mt-6 pt-6 border-t text-center">
+                <div className="text-lg font-medium">
                   {todayCompletedHabits + todayCompletedTasks > 5 ? 
                     "🎉 Productive day! Keep it up!" : 
                     todayCompletedHabits + todayCompletedTasks > 0 ?
@@ -744,33 +820,33 @@ export default function Dashboard() {
     .sort((a, b) => a.position - b.position)
 
   return (
-    <div className="space-y-6 px-2 md:px-0">
+    <div className="space-y-8 px-2 md:px-0">
       <motion.div
-        initial={{ opacity: 0, y: -10 }}
+        initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.3 }}
-        className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4"
+        transition={{ duration: 0.5 }}
+        className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 p-6 bg-gradient-to-r from-primary/5 to-primary/10 rounded-2xl"
       >
-        <div className="flex items-center gap-3">
-          <div className="p-2 bg-gradient-to-br from-primary/10 to-primary/5 rounded-xl">
-            <BarChart className="h-6 w-6 text-primary" />
+        <div className="flex items-center gap-4">
+          <div className="p-3 bg-primary/20 rounded-xl shadow-lg">
+            <BarChart className="h-8 w-8 text-primary" />
           </div>
           <div>
-            <h2 className="text-2xl font-bold">Dashboard</h2>
-            <p className="text-sm text-muted-foreground">Your productivity overview</p>
+            <h2 className="text-3xl font-bold">Dashboard</h2>
+            <p className="text-lg text-muted-foreground">Your productivity overview</p>
           </div>
         </div>
         
-        <div className="flex flex-wrap gap-2 items-center">
+        <div className="flex flex-wrap gap-3 items-center">
           <Tabs 
             value={timeframe} 
             onValueChange={setTimeframe}
             className="mr-2"
           >
-            <TabsList className="bg-muted/50">
-              <TabsTrigger value="daily" className="text-xs">Daily</TabsTrigger>
-              <TabsTrigger value="weekly" className="text-xs">Weekly</TabsTrigger>
-              <TabsTrigger value="monthly" className="text-xs">Monthly</TabsTrigger>
+            <TabsList className="bg-background shadow-sm">
+              <TabsTrigger value="daily" className="font-medium">Daily</TabsTrigger>
+              <TabsTrigger value="weekly" className="font-medium">Weekly</TabsTrigger>
+              <TabsTrigger value="monthly" className="font-medium">Monthly</TabsTrigger>
             </TabsList>
           </Tabs>
           
@@ -778,9 +854,9 @@ export default function Dashboard() {
             variant={isEditMode ? "default" : "outline"}
             size="sm"
             onClick={() => setIsEditMode(!isEditMode)}
-            className="h-8"
+            className="h-10 px-4 shadow-sm"
           >
-            <Settings className="h-4 w-4 mr-1" />
+            <Settings className="h-4 w-4 mr-2" />
             {isEditMode ? "Done" : "Customize"}
           </Button>
         </div>
@@ -792,18 +868,19 @@ export default function Dashboard() {
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: "auto" }}
             exit={{ opacity: 0, height: 0 }}
-            className="flex flex-wrap gap-2 justify-between items-center bg-muted/30 p-4 rounded-xl border"
+            transition={{ duration: 0.3 }}
+            className="flex flex-wrap gap-3 justify-between items-center bg-gradient-to-r from-muted/30 to-muted/10 p-6 rounded-2xl border shadow-sm"
           >
-            <div className="flex gap-2 flex-wrap">
-              <Button size="sm" onClick={addCard} className="h-8">
-                <Plus className="h-4 w-4 mr-1" />
+            <div className="flex gap-3 flex-wrap">
+              <Button size="sm" onClick={addCard} className="h-10 shadow-sm">
+                <Plus className="h-4 w-4 mr-2" />
                 Add Card
               </Button>
               <Button
                 size="sm"
                 variant="outline"
                 onClick={resetToDefaults}
-                className="h-8"
+                className="h-10 shadow-sm"
               >
                 Reset Layout
               </Button>
@@ -811,9 +888,9 @@ export default function Dashboard() {
             <Button
               size="sm"
               onClick={saveCardConfig}
-              className="h-8"
+              className="h-10 shadow-sm"
             >
-              <Save className="h-4 w-4 mr-1" />
+              <Save className="h-4 w-4 mr-2" />
               Save Layout
             </Button>
           </motion.div>
@@ -821,78 +898,85 @@ export default function Dashboard() {
       </AnimatePresence>
 
       {/* Cards grid */}
-      <div className="grid grid-cols-4 gap-4">
-        {displayCards.map((card, index) => (
-          <motion.div
-            key={card.id}
-            custom={index}
-            initial="hidden"
-            animate="visible"
-            variants={cardVariants}
-            className={getColumnSpanClass(card)}
-          >
-            {isEditMode ? (
-              <div className="relative group">
-                {renderCardContent(card)}
-                <div className="absolute inset-0 bg-black/20 backdrop-blur-[1px] rounded-lg flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                  <div className="flex gap-1">
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      onClick={() => {
-                        setEditingCard(card)
-                        setIsConfigOpen(true)
-                      }}
-                      className="h-8 w-8 p-0"
-                    >
-                      <Edit className="h-3 w-3" />
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      onClick={() => moveCardUp(index)}
-                      disabled={index === 0}
-                      className="h-8 w-8 p-0"
-                    >
-                      <ArrowUp className="h-3 w-3" />
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      onClick={() => moveCardDown(index)}
-                      disabled={index === displayCards.length - 1}
-                      className="h-8 w-8 p-0"
-                    >
-                      <ArrowDown className="h-3 w-3" />
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      onClick={() => deleteCard(card.id)}
-                      className="h-8 w-8 p-0 text-red-500 hover:text-red-600"
-                    >
-                      <Trash2 className="h-3 w-3" />
-                    </Button>
-                  </div>
+      <div className="grid grid-cols-4 gap-6">
+        <AnimatePresence>
+          {displayCards.map((card, index) => (
+            <motion.div
+              key={card.id}
+              custom={index}
+              initial="hidden"
+              animate="visible"
+              exit="hidden"
+              variants={cardVariants}
+              className={getColumnSpanClass(card)}
+            >
+              {isEditMode ? (
+                <div className="relative group">
+                  {renderCardContent(card)}
+                  <motion.div 
+                    className="absolute inset-0 bg-black/30 backdrop-blur-sm rounded-xl flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-200"
+                    initial={{ opacity: 0 }}
+                    whileHover={{ opacity: 1 }}
+                  >
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => {
+                          setEditingCard(card)
+                          setIsConfigOpen(true)
+                        }}
+                        className="h-10 w-10 p-0 shadow-lg"
+                      >
+                        <Edit className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => moveCardUp(index)}
+                        disabled={index === 0}
+                        className="h-10 w-10 p-0 shadow-lg"
+                      >
+                        <ArrowUp className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => moveCardDown(index)}
+                        disabled={index === displayCards.length - 1}
+                        className="h-10 w-10 p-0 shadow-lg"
+                      >
+                        <ArrowDown className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => deleteCard(card.id)}
+                        className="h-10 w-10 p-0 text-red-500 hover:text-red-600 shadow-lg"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </motion.div>
                 </div>
-              </div>
-            ) : (
-              renderCardContent(card)
-            )}
-          </motion.div>
-        ))}
+              ) : (
+                renderCardContent(card)
+              )}
+            </motion.div>
+          ))}
+        </AnimatePresence>
       </div>
 
       {/* Card configuration dialog */}
       <Dialog open={isConfigOpen} onOpenChange={setIsConfigOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Configure Card</DialogTitle>
+            <DialogTitle className="text-xl font-semibold">Configure Card</DialogTitle>
           </DialogHeader>
           {editingCard && (
-            <div className="grid gap-4 py-4">
+            <div className="grid gap-6 py-4">
               <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="cardTitle" className="text-right">
+                <Label htmlFor="cardTitle" className="text-right font-medium">
                   Title
                 </Label>
                 <Input
@@ -904,7 +988,7 @@ export default function Dashboard() {
               </div>
               
               <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="cardType" className="text-right">
+                <Label htmlFor="cardType" className="text-right font-medium">
                   Type
                 </Label>
                 <Select
@@ -928,7 +1012,7 @@ export default function Dashboard() {
               </div>
               
               <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="cardIcon" className="text-right">
+                <Label htmlFor="cardIcon" className="text-right font-medium">
                   Icon
                 </Label>
                 <Select
@@ -955,7 +1039,7 @@ export default function Dashboard() {
               </div>
               
               <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="cardSize" className="text-right">
+                <Label htmlFor="cardSize" className="text-right font-medium">
                   Size
                 </Label>
                 <Select
@@ -974,7 +1058,7 @@ export default function Dashboard() {
               </div>
               
               <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="cardEnabled" className="text-right">
+                <Label htmlFor="cardEnabled" className="text-right font-medium">
                   Visible
                 </Label>
                 <div className="col-span-3 flex items-center space-x-2">
@@ -991,7 +1075,7 @@ export default function Dashboard() {
                 </div>
               </div>
               
-              <div className="flex justify-end space-x-2 pt-4">
+              <div className="flex justify-end space-x-3 pt-4">
                 <Button
                   variant="outline"
                   onClick={() => {
