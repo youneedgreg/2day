@@ -9,7 +9,8 @@ import {
   Gift, Coffee, Compass, Check, PenSquare, Settings, PencilRuler,
   Edit, MoreVertical, Clock, Search, Filter, Star, Archive,
   Share, Bookmark, Tag, MapPin, Users, Lightbulb, X,
-  Sparkles, Download, RotateCcw, TrendingUp
+  Sparkles, Download, RotateCcw, TrendingUp,
+  Target
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -50,6 +51,7 @@ import isToday from 'dayjs/plugin/isToday'
 import isTomorrow from 'dayjs/plugin/isTomorrow'
 import customParseFormat from 'dayjs/plugin/customParseFormat'
 import { toast } from 'sonner'
+import { cn } from "@/lib/utils"
 
 // Initialize dayjs plugins
 dayjs.extend(relativeTime)
