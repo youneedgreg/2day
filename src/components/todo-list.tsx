@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { 
   Plus, Trash2, ListTodo, CheckCircle2, CircleSlash, Sparkles, 
@@ -62,6 +62,19 @@ export default function TodoList() {
   const [newTodoHasTimer, setNewTodoHasTimer] = useState(false)
   const [activeTimerId, setActiveTimerId] = useState<string | null>(null)
   
+  const fetchTodos = useCallback(async () => {
+    if (!user) return
+    try {
+      const data = await getTodos(user.id)
+      setTodos(data)
+    } catch (error) {
+      console.error('Error fetching todos:', error)
+      toast.error('Failed to load todos')
+    } finally {
+      setLoading(false)
+    }
+  }, [user])
+
   useEffect(() => {
     if (!user) return
 
@@ -78,20 +91,7 @@ export default function TodoList() {
     return () => {
       subscription.unsubscribe()
     }
-  }, [user])
-
-  const fetchTodos = async () => {
-    if (!user) return
-    try {
-      const data = await getTodos(user.id)
-      setTodos(data)
-    } catch (error) {
-      console.error('Error fetching todos:', error)
-      toast.error('Failed to load todos')
-    } finally {
-      setLoading(false)
-    }
-  }
+  }, [user, fetchTodos])
 
   const handleCreateTodo = async () => {
     if (!user || !newTodo.trim()) return
@@ -467,6 +467,31 @@ export default function TodoList() {
     }
   }
 
+  const handleTimerComplete = useCallback(async (todoId: string, todoTitle: string) => {
+    try {
+      await updateTodoTimer(todoId, {
+        is_running: false,
+        completed: true
+      })
+      
+      if (activeTimerId === todoId) {
+        setActiveTimerId(null)
+      }
+      
+      // Show notification
+      if ('Notification' in window && Notification.permission === 'granted') {
+        new Notification("Timer Completed", { 
+          body: `Time's up for: ${todoTitle}`,
+          icon: "/favicon.ico"
+        })
+      }
+      
+      toast.success(`Timer completed for: ${todoTitle}`)
+    } catch (error) {
+      console.error('Error completing timer:', error)
+    }
+  }, [activeTimerId])
+
   // Timer update effect
   useEffect(() => {
     const todosWithRunningTimers = getAllTodos().filter(todo => 
@@ -507,32 +532,7 @@ export default function TodoList() {
     }, 1000)
     
     return () => clearInterval(interval)
-  }, [todos, activeTimers])
-
-  const handleTimerComplete = async (todoId: string, todoTitle: string) => {
-    try {
-      await updateTodoTimer(todoId, {
-        is_running: false,
-        completed: true
-      })
-      
-      if (activeTimerId === todoId) {
-        setActiveTimerId(null)
-      }
-      
-      // Show notification
-      if ('Notification' in window && Notification.permission === 'granted') {
-        new Notification("Timer Completed", { 
-          body: `Time's up for: ${todoTitle}`,
-          icon: "/favicon.ico"
-        })
-      }
-      
-      toast.success(`Timer completed for: ${todoTitle}`)
-    } catch (error) {
-      console.error('Error completing timer:', error)
-    }
-  }
+  }, [todos, activeTimers, getAllTodos, handleTimerComplete])
 
   // Helper functions
   const findTodoById = (id: string): TodoWithRelations | null => {
@@ -549,7 +549,7 @@ export default function TodoList() {
     return search(todos)
   }
 
-  const getAllTodos = (): TodoWithRelations[] => {
+  const getAllTodos = useCallback((): TodoWithRelations[] => {
     const result: TodoWithRelations[] = []
     const traverse = (todoList: TodoWithRelations[]) => {
       todoList.forEach(todo => {
@@ -561,7 +561,7 @@ export default function TodoList() {
     }
     traverse(todos)
     return result
-  }
+  }, [todos])
 
   const clearCompleted = async () => {
     try {
