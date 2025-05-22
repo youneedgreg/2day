@@ -259,13 +259,13 @@ export default function Reminders() {
     } finally {
       setLoading(false)
     }
-  }, [user])
+  }, [user, fetchReminders])
 
   const handleRealTimeUpdate = useCallback((payload: RealtimePayload) => {
     if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE' || payload.eventType === 'DELETE') {
       fetchReminders()
     }
-  }, [])
+  }, [fetchReminders])
 
   const fetchReminders = useCallback(async () => {
     if (!user) return
