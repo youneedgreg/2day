@@ -277,8 +277,16 @@ export async function deleteHabit(habitId: string): Promise<void> {
   }
 }
 
+// Define types for real-time change payloads
+interface RealtimeChangePayload {
+  eventType: 'INSERT' | 'UPDATE' | 'DELETE'
+  new: Record<string, unknown> | null
+  old: Record<string, unknown> | null
+  table: 'habits' | 'habit_completions'
+}
+
 // Subscribe to real-time changes for habits
-export function subscribeToHabitChanges(userId: string, callback: (payload: any) => void) {
+export function subscribeToHabitChanges(userId: string, callback: (payload: RealtimeChangePayload) => void) {
   const supabase = createClient()
   
   const subscription = supabase
