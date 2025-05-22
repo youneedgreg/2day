@@ -33,6 +33,17 @@ export interface UpdateTodoInput {
   is_expanded?: boolean
 }
 
+// Define types for real-time changes
+type RealtimeChangePayload = {
+  schema: string
+  table: string
+  commit_timestamp: string
+  eventType: 'INSERT' | 'UPDATE' | 'DELETE'
+  new: Record<string, unknown> | null
+  old: Record<string, unknown> | null
+  errors: string[]
+}
+
 // Get all todos for a user with their relations
 export async function getTodos(userId: string): Promise<TodoWithRelations[]> {
   const supabase = createClient()
@@ -273,7 +284,7 @@ export async function addTimerToTodo(todoId: string, durationMinutes: number = 2
 }
 
 // Subscribe to real-time changes
-export function subscribeToTodoChanges(userId: string, callback: (payload: any) => void) {
+export function subscribeToTodoChanges(userId: string, callback: (payload: RealtimeChangePayload) => void) {
   const supabase = createClient()
   
   const subscription = supabase
