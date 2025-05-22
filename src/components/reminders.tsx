@@ -234,6 +234,33 @@ export default function Reminders() {
     upcoming: 0
   })
 
+  // Define fetchReminders first
+  const fetchReminders = useCallback(async () => {
+    if (!user) return
+    try {
+      const [allReminders, upcomingReminders, overdueReminders] = await Promise.all([
+        getReminders(user.id),
+        getUpcomingReminders(user.id),
+        getOverdueReminders(user.id)
+      ])
+      
+      setReminders(allReminders)
+      
+      // Calculate stats
+      const completedCount = allReminders.filter(r => r.status === 'completed').length
+      setStats({
+        total: allReminders.length,
+        completed: completedCount,
+        overdue: overdueReminders.length,
+        upcoming: upcomingReminders.length
+      })
+    } catch (error) {
+      console.error('Error fetching reminders:', error)
+      toast.error('Failed to load reminders')
+    }
+  }, [user])
+
+  // Then define initializeData
   const initializeData = useCallback(async () => {
     if (!user) return
     
@@ -261,36 +288,12 @@ export default function Reminders() {
     }
   }, [user, fetchReminders])
 
+  // Finally define handleRealTimeUpdate
   const handleRealTimeUpdate = useCallback((payload: RealtimePayload) => {
     if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE' || payload.eventType === 'DELETE') {
       fetchReminders()
     }
   }, [fetchReminders])
-
-  const fetchReminders = useCallback(async () => {
-    if (!user) return
-    try {
-      const [allReminders, upcomingReminders, overdueReminders] = await Promise.all([
-        getReminders(user.id),
-        getUpcomingReminders(user.id),
-        getOverdueReminders(user.id)
-      ])
-      
-      setReminders(allReminders)
-      
-      // Calculate stats
-      const completedCount = allReminders.filter(r => r.status === 'completed').length
-      setStats({
-        total: allReminders.length,
-        completed: completedCount,
-        overdue: overdueReminders.length,
-        upcoming: upcomingReminders.length
-      })
-    } catch (error) {
-      console.error('Error fetching reminders:', error)
-      toast.error('Failed to load reminders')
-    }
-  }, [user])
 
   useEffect(() => {
     if (!user) return
