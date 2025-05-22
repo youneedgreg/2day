@@ -300,6 +300,7 @@ export default function TodoList() {
       console.error('Error deleting note:', error)
       toast.error('Failed to delete note')
     }
+  }
 
   const handleAddTimer = async (todoId: string) => {
     try {
