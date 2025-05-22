@@ -759,23 +759,28 @@ export default function Notes() {
       // Optimistic update
       setNotes(prev => prev.map(n => 
         n.id === noteId ? { ...n, ...updates } : n
-      ))
+      ));
       
-      const { metadata, content, ...restUpdates } = updates
-      await updateNote(noteId, {
+      const { metadata, content, color, tags, note_type, ...restUpdates } = updates;
+      
+      // Create a clean update object with only defined values
+      const cleanUpdates = {
         ...restUpdates,
-        content: content || undefined, // Convert null to undefined
-        metadata: {
-          ...(metadata || {})
-        }
-      })
-      toast.success('Note updated successfully')
+        content: content ?? undefined,
+        color: color ?? undefined,
+        tags: tags ?? undefined,
+        note_type: note_type ?? undefined,
+        metadata: metadata ? { ...metadata } : undefined
+      };
+      
+      await updateNote(noteId, cleanUpdates);
+      toast.success('Note updated successfully');
     } catch (error) {
-      console.error('Error updating note:', error)
-      toast.error('Failed to update note')
-      fetchNotes() // Revert on error
+      console.error('Error updating note:', error);
+      toast.error('Failed to update note');
+      fetchNotes(); // Revert on error
     }
-  }
+  };
 
   const handleDeleteNote = async (noteId: string) => {
     try {
@@ -1926,7 +1931,7 @@ export default function Notes() {
                   <RichTextEditor
                     initialValue={editingNote.content || ''}
                     onChange={(content) => setEditingNote({ ...editingNote, content })}
-                    fontFamily={editingNote.font_family || 'font-sans'}
+                    fontFamily={editingNote.metadata?.font_family || 'font-sans'}
                   />
                 )}
 
@@ -1976,9 +1981,15 @@ export default function Notes() {
                       {fontOptions.map((font) => (
                         <Button
                           key={font.value}
-                          variant={editingNote.font_family === font.value ? "default" : "outline"}
+                          variant={editingNote.metadata?.font_family === font.value ? "default" : "outline"}
                           className={cn("h-12", font.value)}
-                          onClick={() => setEditingNote({ ...editingNote, font_family: font.value })}
+                          onClick={() => setEditingNote(prev => prev ? {
+                            ...prev,
+                            metadata: {
+                              ...prev.metadata,
+                              font_family: font.value
+                            }
+                          } : null)}
                         >
                           {font.name}
                         </Button>
@@ -2118,10 +2129,13 @@ export default function Notes() {
                       title: editingNote.title,
                       content: editingNote.content,
                       color: editingNote.color,
-                      font_family: editingNote.font_family,
-                      is_pinned: editingNote.metadata?.is_pinned,
-                      is_favorite: editingNote.metadata?.is_favorite,
-                      is_archived: editingNote.metadata?.is_archived
+                      metadata: {
+                        ...editingNote.metadata,
+                        is_pinned: editingNote.metadata?.is_pinned,
+                        is_favorite: editingNote.metadata?.is_favorite,
+                        is_archived: editingNote.metadata?.is_archived,
+                        font_family: editingNote.metadata?.font_family
+                      }
                     })
                     setEditingNote(null)
                   }
