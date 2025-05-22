@@ -6,7 +6,7 @@ import {
   Plus, Trash2, ListTodo, CheckCircle2, CircleSlash, Sparkles, 
   Clock, X, Focus, AlignLeft, Edit, Timer, Target,
   Calendar, Archive, MoreVertical, Zap, TrendingUp,
-  BookOpen, CheckSquare, Flame, Play, Pause, RotateCcw
+  BookOpen, CheckSquare, Flame, Play, Pause, RotateCcw, ChevronDown, ChevronRight
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -46,24 +46,6 @@ type TodoWithRelations = Omit<DatabaseTodoWithRelations, 'priority'> & {
 
 // Mock types and data for demo
 type TodoStatus = 'pending' | 'completed' | 'archived'
-
-type TodoNote = {
-  id: string
-  content: string
-  created_at: string
-}
-
-type TodoTimer = {
-  id: string
-  todo_id: string
-  duration_minutes: number
-  start_time: string | null
-  paused_time_remaining: number | null
-  is_running: boolean
-  completed: boolean
-  created_at: string
-  updated_at: string
-}
 
 // Format time function (mm:ss)
 const formatTime = (timeInSeconds: number): string => {
@@ -167,7 +149,7 @@ export default function TodoList() {
             if (todo) {
               // Handle timer completion
               setActiveTimerId(null)
-              toast.success(`Timer completed for: ${todo.title}`)
+              handleTimerComplete(todo.id, todo.title)
             }
             delete updated[todoId]
           }
@@ -500,6 +482,232 @@ export default function TodoList() {
       scale: 0.95,
       transition: { duration: 0.2 }
     }
+  }
+
+  const renderTodoItem = (todo: TodoWithRelations) => {
+    const hasChildren = todo.children && todo.children.length > 0;
+    return (
+      <motion.div
+        key={todo.id}
+        variants={cardVariants}
+        initial="hidden"
+        animate="visible"
+        exit="exit"
+        whileHover={{ scale: 1.01, y: -2 }}
+        transition={{ duration: 0.2 }}
+      >
+        <Card
+          className={cn(
+            "overflow-hidden transition-all duration-300 hover:shadow-xl border-0 shadow-lg bg-gradient-to-br",
+            todo.status === 'completed' 
+              ? "from-green-50/50 to-green-100/30 border border-green-500/20" 
+              : "from-card to-card/80",
+            isFocusMode && todo.id !== activeTimerId ? "opacity-40" : "",
+            isSelectionMode && selectedTodos.includes(todo.id) ? "ring-2 ring-primary" : ""
+          )}
+        >
+          <CardContent className={cn("p-4", todo.timer ? "pb-2" : "pb-4")}>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-3 flex-grow min-w-0">
+                {isSelectionMode && (
+                  <Checkbox 
+                    checked={selectedTodos.includes(todo.id)}
+                    onCheckedChange={(checked) => {
+                      if (checked) {
+                        setSelectedTodos(prev => [...prev, todo.id])
+                      } else {
+                        setSelectedTodos(prev => prev.filter(id => id !== todo.id))
+                      }
+                    }}
+                  />
+                )}
+                
+                <Checkbox
+                  checked={todo.status === 'completed'}
+                  onCheckedChange={() => handleToggleTodo(todo)}
+                  className={todo.status === 'completed' ? "border-green-500 bg-green-500" : ""}
+                />
+                
+                <div className="flex-grow min-w-0 space-y-2">
+                  {editingTodoId === todo.id ? (
+                    <div className="flex space-x-2">
+                      <Input 
+                        value={editText} 
+                        onChange={(e) => setEditText(e.target.value)} 
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault()
+                            handleEditTodo(todo.id, editText)
+                          }
+                        }}
+                        className="h-9 text-sm"
+                        autoFocus
+                      />
+                      <Button size="sm" onClick={() => handleEditTodo(todo.id, editText)} className="h-9 px-3">
+                        <CheckSquare className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="flex items-center gap-3">
+                        <span
+                          className={cn(
+                            "text-base font-medium truncate cursor-pointer transition-colors",
+                            todo.status === 'completed' ? "line-through text-muted-foreground" : ""
+                          )}
+                          onClick={() => handleToggleTodo(todo)}
+                        >
+                          {todo.title}
+                        </span>
+                        
+                        <Badge 
+                          variant="outline" 
+                          className={cn("text-xs px-2 py-0.5 border", getPriorityColor(todo.priority))}
+                        >
+                          {getPriorityIcon(todo.priority)}
+                          <span className="ml-1 capitalize">{todo.priority}</span>
+                        </Badge>
+                      </div>
+                      
+                      <div className="flex items-center gap-2">
+                        {todo.timer && (
+                          <Badge 
+                            variant={todo.timer.is_running ? "default" : "outline"}
+                            className="text-xs px-2 py-0.5 flex items-center gap-1 bg-orange-500/10 text-orange-600 border-orange-500/20"
+                          >
+                            <Clock className="h-3 w-3" />
+                            {formatTime(activeTimers[todo.id] || (todo.timer.duration_minutes * 60))}
+                          </Badge>
+                        )}
+                        
+                        {todo.notes && todo.notes.length > 0 && (
+                          <Badge variant="outline" className="text-xs px-2 py-0.5 flex items-center gap-1 bg-blue-500/10 text-blue-600 border-blue-500/20">
+                            <AlignLeft className="h-3 w-3" />
+                            {todo.notes.length}
+                          </Badge>
+                        )}
+                        
+                        {todo.due_date && (
+                          <Badge variant="outline" className="text-xs px-2 py-0.5 flex items-center gap-1 bg-purple-500/10 text-purple-600 border-purple-500/20">
+                            <Calendar className="h-3 w-3" />
+                            {new Date(todo.due_date).toLocaleDateString()}
+                          </Badge>
+                        )}
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+              
+              <div className="flex items-center gap-1">
+                {todo.timer && (
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          className={cn(
+                            "h-9 w-9 rounded-lg",
+                            todo.timer.is_running ? "text-green-500 bg-green-500/10" : "hover:bg-orange-500/10"
+                          )}
+                          onClick={() => {
+                            if (todo.timer?.is_running) {
+                              handlePauseTimer(todo.id)
+                            } else if (!todo.timer?.completed) {
+                              handleStartTimer(todo.id)
+                            } else {
+                              handleResetTimer(todo.id)
+                            }
+                          }}
+                        >
+                          {todo.timer.is_running ? (
+                            <Pause className="h-4 w-4" />
+                          ) : todo.timer.completed ? (
+                            <RotateCcw className="h-4 w-4" />
+                          ) : (
+                            <Play className="h-4 w-4" />
+                          )}
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        {todo.timer.is_running 
+                          ? "Pause Timer" 
+                          : todo.timer.completed 
+                            ? "Reset Timer" 
+                            : "Start Timer"}
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                )}
+                
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="sm" className="h-9 w-9 rounded-lg hover:bg-muted">
+                      <MoreVertical className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-48">
+                    <DropdownMenuItem onClick={() => {
+                      setEditingTodoId(todo.id)
+                      setEditText(todo.title)
+                    }}>
+                      <Edit className="h-4 w-4 mr-2" />
+                      Edit Task
+                    </DropdownMenuItem>
+                    
+                    <DropdownMenuItem onClick={() => setSelectedTodoForNote(todo.id)}>
+                      <AlignLeft className="h-4 w-4 mr-2" />
+                      Add Note
+                    </DropdownMenuItem>
+                    
+                    {!todo.timer && (
+                      <DropdownMenuItem onClick={() => handleAddTimer(todo.id)}>
+                        <Timer className="h-4 w-4 mr-2" />
+                        Add Timer
+                      </DropdownMenuItem>
+                    )}
+                    
+                    <DropdownMenuSeparator />
+                    
+                    <DropdownMenuItem 
+                      onClick={() => handleDeleteTodo(todo.id)}
+                      className="text-red-600 focus:text-red-600"
+                    >
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      Delete
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+            </div>
+            
+            {todo.timer && (
+              <div className="mt-3 pt-2">
+                <Progress 
+                  value={todo.timer.is_running 
+                    ? 100 - ((activeTimers[todo.id] || 0) / (todo.timer.duration_minutes * 60) * 100)
+                    : 0
+                  } 
+                  className="h-2" 
+                />
+              </div>
+            )}
+          </CardContent>
+        </Card>
+        {hasChildren && (
+          <button 
+            onClick={(e) => {
+              e.stopPropagation();
+              handleUpdateExpansion(todo.id, !todo.is_expanded);
+            }}
+            className="text-muted-foreground hover:text-foreground transition-colors"
+          >
+            {todo.is_expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+          </button>
+        )}
+      </motion.div>
+    );
   }
 
   if (loading) {
@@ -872,219 +1080,7 @@ export default function TodoList() {
                 className="space-y-4"
               >
                 <AnimatePresence>
-                  {filteredTodos.map((todo) => (
-                    <motion.div
-                      key={todo.id}
-                      variants={cardVariants}
-                      initial="hidden"
-                      animate="visible"
-                      exit="exit"
-                      whileHover={{ scale: 1.01, y: -2 }}
-                      transition={{ duration: 0.2 }}
-                    >
-                      <Card
-                        className={cn(
-                          "overflow-hidden transition-all duration-300 hover:shadow-xl border-0 shadow-lg bg-gradient-to-br",
-                          todo.status === 'completed' 
-                            ? "from-green-50/50 to-green-100/30 border border-green-500/20" 
-                            : "from-card to-card/80",
-                          isFocusMode && todo.id !== activeTimerId ? "opacity-40" : "",
-                          isSelectionMode && selectedTodos.includes(todo.id) ? "ring-2 ring-primary" : ""
-                        )}
-                      >
-                        <CardContent className={cn("p-4", todo.timer ? "pb-2" : "pb-4")}>
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center space-x-3 flex-grow min-w-0">
-                              {isSelectionMode && (
-                                <Checkbox 
-                                  checked={selectedTodos.includes(todo.id)}
-                                  onCheckedChange={(checked) => {
-                                    if (checked) {
-                                      setSelectedTodos(prev => [...prev, todo.id])
-                                    } else {
-                                      setSelectedTodos(prev => prev.filter(id => id !== todo.id))
-                                    }
-                                  }}
-                                />
-                              )}
-                              
-                              <Checkbox
-                                checked={todo.status === 'completed'}
-                                onCheckedChange={() => handleToggleTodo(todo)}
-                                className={todo.status === 'completed' ? "border-green-500 bg-green-500" : ""}
-                              />
-                              
-                              <div className="flex-grow min-w-0 space-y-2">
-                                {editingTodoId === todo.id ? (
-                                  <div className="flex space-x-2">
-                                    <Input 
-                                      value={editText} 
-                                      onChange={(e) => setEditText(e.target.value)} 
-                                      onKeyDown={(e) => {
-                                        if (e.key === "Enter") {
-                                          e.preventDefault()
-                                          handleEditTodo(todo.id, editText)
-                                        }
-                                      }}
-                                      className="h-9 text-sm"
-                                      autoFocus
-                                    />
-                                    <Button size="sm" onClick={() => handleEditTodo(todo.id, editText)} className="h-9 px-3">
-                                      <CheckSquare className="h-4 w-4" />
-                                    </Button>
-                                  </div>
-                                ) : (
-                                  <>
-                                    <div className="flex items-center gap-3">
-                                      <span
-                                        className={cn(
-                                          "text-base font-medium truncate cursor-pointer transition-colors",
-                                          todo.status === 'completed' ? "line-through text-muted-foreground" : ""
-                                        )}
-                                        onClick={() => handleToggleTodo(todo)}
-                                      >
-                                        {todo.title}
-                                      </span>
-                                      
-                                      <Badge 
-                                        variant="outline" 
-                                        className={cn("text-xs px-2 py-0.5 border", getPriorityColor(todo.priority))}
-                                      >
-                                        {getPriorityIcon(todo.priority)}
-                                        <span className="ml-1 capitalize">{todo.priority}</span>
-                                      </Badge>
-                                    </div>
-                                    
-                                    <div className="flex items-center gap-2">
-                                      {todo.timer && (
-                                        <Badge 
-                                          variant={todo.timer.is_running ? "default" : "outline"}
-                                          className="text-xs px-2 py-0.5 flex items-center gap-1 bg-orange-500/10 text-orange-600 border-orange-500/20"
-                                        >
-                                          <Clock className="h-3 w-3" />
-                                          {formatTime(activeTimers[todo.id] || (todo.timer.duration_minutes * 60))}
-                                        </Badge>
-                                      )}
-                                      
-                                      {todo.notes && todo.notes.length > 0 && (
-                                        <Badge variant="outline" className="text-xs px-2 py-0.5 flex items-center gap-1 bg-blue-500/10 text-blue-600 border-blue-500/20">
-                                          <AlignLeft className="h-3 w-3" />
-                                          {todo.notes.length}
-                                        </Badge>
-                                      )}
-                                      
-                                      {todo.due_date && (
-                                        <Badge variant="outline" className="text-xs px-2 py-0.5 flex items-center gap-1 bg-purple-500/10 text-purple-600 border-purple-500/20">
-                                          <Calendar className="h-3 w-3" />
-                                          {new Date(todo.due_date).toLocaleDateString()}
-                                        </Badge>
-                                      )}
-                                    </div>
-                                  </>
-                                )}
-                              </div>
-                            </div>
-                            
-                            <div className="flex items-center gap-1">
-                              {todo.timer && (
-                                <TooltipProvider>
-                                  <Tooltip>
-                                    <TooltipTrigger asChild>
-                                      <Button 
-                                        variant="ghost" 
-                                        size="sm" 
-                                        className={cn(
-                                          "h-9 w-9 rounded-lg",
-                                          todo.timer.is_running ? "text-green-500 bg-green-500/10" : "hover:bg-orange-500/10"
-                                        )}
-                                        onClick={() => {
-                                          if (todo.timer?.is_running) {
-                                            handlePauseTimer(todo.id)
-                                          } else if (!todo.timer?.completed) {
-                                            handleStartTimer(todo.id)
-                                          } else {
-                                            handleResetTimer(todo.id)
-                                          }
-                                        }}
-                                      >
-                                        {todo.timer.is_running ? (
-                                          <Pause className="h-4 w-4" />
-                                        ) : todo.timer.completed ? (
-                                          <RotateCcw className="h-4 w-4" />
-                                        ) : (
-                                          <Play className="h-4 w-4" />
-                                        )}
-                                      </Button>
-                                    </TooltipTrigger>
-                                    <TooltipContent>
-                                      {todo.timer.is_running 
-                                        ? "Pause Timer" 
-                                        : todo.timer.completed 
-                                          ? "Reset Timer" 
-                                          : "Start Timer"}
-                                    </TooltipContent>
-                                  </Tooltip>
-                                </TooltipProvider>
-                              )}
-                              
-                              <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                  <Button variant="ghost" size="sm" className="h-9 w-9 rounded-lg hover:bg-muted">
-                                    <MoreVertical className="h-4 w-4" />
-                                  </Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end" className="w-48">
-                                  <DropdownMenuItem onClick={() => {
-                                    setEditingTodoId(todo.id)
-                                    setEditText(todo.title)
-                                  }}>
-                                    <Edit className="h-4 w-4 mr-2" />
-                                    Edit Task
-                                  </DropdownMenuItem>
-                                  
-                                  <DropdownMenuItem onClick={() => setSelectedTodoForNote(todo.id)}>
-                                    <AlignLeft className="h-4 w-4 mr-2" />
-                                    Add Note
-                                  </DropdownMenuItem>
-                                  
-                                  {!todo.timer && (
-                                    <DropdownMenuItem onClick={() => {
-                                      // Add timer logic
-                                    }}>
-                                      <Timer className="h-4 w-4 mr-2" />
-                                      Add Timer
-                                    </DropdownMenuItem>
-                                  )}
-                                  
-                                  <DropdownMenuSeparator />
-                                  
-                                  <DropdownMenuItem 
-                                    onClick={() => handleDeleteTodo(todo.id)}
-                                    className="text-red-600 focus:text-red-600"
-                                  >
-                                    <Trash2 className="h-4 w-4 mr-2" />
-                                    Delete
-                                  </DropdownMenuItem>
-                                </DropdownMenuContent>
-                              </DropdownMenu>
-                            </div>
-                          </div>
-                          
-                          {todo.timer && (
-                            <div className="mt-3 pt-2">
-                              <Progress 
-                                value={todo.timer.is_running 
-                                  ? 100 - ((activeTimers[todo.id] || 0) / (todo.timer.duration_minutes * 60) * 100)
-                                  : 0
-                                } 
-                                className="h-2" 
-                              />
-                            </div>
-                          )}
-                        </CardContent>
-                      </Card>
-                    </motion.div>
-                  ))}
+                  {filteredTodos.map((todo) => renderTodoItem(todo))}
                 </AnimatePresence>
               </motion.div>
             )}
