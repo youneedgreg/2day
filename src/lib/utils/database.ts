@@ -1,10 +1,8 @@
-import { createClient } from '@supabase/supabase-js'
-import { Database } from '../types/database'
+import { createClient } from '@/lib/supabaseClient'
+import type { Database } from '@/lib/supabaseClient'
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-
-export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey)
+// Create a client-side Supabase client
+export const supabase = createClient()
 
 // Profile operations
 export const getProfile = async (userId: string) => {
@@ -65,11 +63,10 @@ export const completeHabit = async (habitId: string) => {
 }
 
 // Todos operations
-export const getTodos = async (userId: string) => {
+export const getTodos = async () => {
   const { data, error } = await supabase
     .from('todos')
     .select('*')
-    .eq('user_id', userId)
     .order('created_at', { ascending: false })
   
   if (error) throw error

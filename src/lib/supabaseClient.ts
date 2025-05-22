@@ -1,15 +1,39 @@
 // lib/supabaseClient.ts
-import { createClient } from '@supabase/supabase-js'
+import { createBrowserClient, createServerClient } from '@supabase/ssr'
+import { cookies } from 'next/headers'
+import { CookieOptions } from '@supabase/ssr'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL as string
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY as string
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey)
+// Create a Supabase client for client-side usage
+export const createClient = () => {
+  return createBrowserClient(supabaseUrl, supabaseAnonKey)
+}
+
+// Create a Supabase client for server-side usage
+export const createServerSupabaseClient = async () => {
+  const cookieStore = await cookies()
+  
+  return createServerClient(supabaseUrl, supabaseAnonKey, {
+    cookies: {
+      get(name: string) {
+        return cookieStore.get(name)?.value
+      },
+      set(name: string, value: string, options: CookieOptions) {
+        cookieStore.set(name, value, options)
+      },
+      remove(name: string, options: CookieOptions) {
+        cookieStore.set(name, '', { ...options, maxAge: 0 })
+      },
+    },
+  })
+}
 
 // Define types for database
 export type Database = {
   public: {
-    tables: {
+    Tables: {
       profiles: {
         Row: {
           id: string
@@ -24,6 +48,223 @@ export type Database = {
         Update: {
           id?: string
           username?: string | null
+          updated_at?: string | null
+        }
+      }
+      todos: {
+        Row: {
+          id: string
+          title: string
+          description: string | null
+          completed: boolean
+          user_id: string
+          created_at: string
+          updated_at: string | null
+        }
+        Insert: {
+          id?: string
+          title: string
+          description?: string | null
+          completed?: boolean
+          user_id: string
+          created_at?: string
+          updated_at?: string | null
+        }
+        Update: {
+          id?: string
+          title?: string
+          description?: string | null
+          completed?: boolean
+          user_id?: string
+          created_at?: string
+          updated_at?: string | null
+        }
+      }
+      todo_notes: {
+        Row: {
+          id: string
+          todo_id: string
+          content: string
+          created_at: string
+          updated_at: string | null
+        }
+        Insert: {
+          id?: string
+          todo_id: string
+          content: string
+          created_at?: string
+          updated_at?: string | null
+        }
+        Update: {
+          id?: string
+          todo_id?: string
+          content?: string
+          created_at?: string
+          updated_at?: string | null
+        }
+      }
+      todo_timers: {
+        Row: {
+          id: string
+          todo_id: string
+          duration: number
+          started_at: string | null
+          completed_at: string | null
+          created_at: string
+          updated_at: string | null
+        }
+        Insert: {
+          id?: string
+          todo_id: string
+          duration: number
+          started_at?: string | null
+          completed_at?: string | null
+          created_at?: string
+          updated_at?: string | null
+        }
+        Update: {
+          id?: string
+          todo_id?: string
+          duration?: number
+          started_at?: string | null
+          completed_at?: string | null
+          created_at?: string
+          updated_at?: string | null
+        }
+      }
+      habits: {
+        Row: {
+          id: string
+          title: string
+          description: string | null
+          frequency: string
+          user_id: string
+          created_at: string
+          updated_at: string | null
+        }
+        Insert: {
+          id?: string
+          title: string
+          description?: string | null
+          frequency: string
+          user_id: string
+          created_at?: string
+          updated_at?: string | null
+        }
+        Update: {
+          id?: string
+          title?: string
+          description?: string | null
+          frequency?: string
+          user_id?: string
+          created_at?: string
+          updated_at?: string | null
+        }
+      }
+      habit_completions: {
+        Row: {
+          id: string
+          habit_id: string
+          completed_at: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          habit_id: string
+          completed_at: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          habit_id?: string
+          completed_at?: string
+          created_at?: string
+        }
+      }
+      notes: {
+        Row: {
+          id: string
+          title: string
+          content: string
+          user_id: string
+          created_at: string
+          updated_at: string | null
+        }
+        Insert: {
+          id?: string
+          title: string
+          content: string
+          user_id: string
+          created_at?: string
+          updated_at?: string | null
+        }
+        Update: {
+          id?: string
+          title?: string
+          content?: string
+          user_id?: string
+          created_at?: string
+          updated_at?: string | null
+        }
+      }
+      reminders: {
+        Row: {
+          id: string
+          title: string
+          description: string | null
+          due_date: string
+          completed: boolean
+          user_id: string
+          space_id: string | null
+          created_at: string
+          updated_at: string | null
+        }
+        Insert: {
+          id?: string
+          title: string
+          description?: string | null
+          due_date: string
+          completed?: boolean
+          user_id: string
+          space_id?: string | null
+          created_at?: string
+          updated_at?: string | null
+        }
+        Update: {
+          id?: string
+          title?: string
+          description?: string | null
+          due_date?: string
+          completed?: boolean
+          user_id?: string
+          space_id?: string | null
+          created_at?: string
+          updated_at?: string | null
+        }
+      }
+      reminder_spaces: {
+        Row: {
+          id: string
+          name: string
+          color: string
+          user_id: string
+          created_at: string
+          updated_at: string | null
+        }
+        Insert: {
+          id?: string
+          name: string
+          color: string
+          user_id: string
+          created_at?: string
+          updated_at?: string | null
+        }
+        Update: {
+          id?: string
+          name?: string
+          color?: string
+          user_id?: string
+          created_at?: string
           updated_at?: string | null
         }
       }

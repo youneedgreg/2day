@@ -1,6 +1,7 @@
 // lib/utils/database/habits.ts
-import { createClient } from '@/lib/utils/supabase/client'
-import { Database } from '@/lib/types/database'
+import { createClient } from '@/lib/supabaseClient'
+import type { Database } from '@/lib/supabaseClient'
+import type { RealtimePostgresChangesPayload } from '@supabase/supabase-js'
 
 type Habit = Database['public']['Tables']['habits']['Row']
 type HabitCompletion = Database['public']['Tables']['habit_completions']['Row']
@@ -23,136 +24,99 @@ export interface CompleteHabitInput {
 }
 
 // Get all habits for a user with their completions
-export async function getHabits(userId: string): Promise<HabitWithCompletions[]> {
+export async function getHabits(userId: string) {
   const supabase = createClient()
   
-  try {
-    // Get habits
-    const { data: habits, error: habitsError } = await supabase
-      .from('habits')
-      .select('*')
-      .eq('user_id', userId)
-      .order('created_at', { ascending: false })
-
-    if (habitsError) throw habitsError
-
-    // Get completions for all habits
-    const habitIds = habits?.map(h => h.id) || []
-    const { data: completions, error: completionsError } = await supabase
-      .from('habit_completions')
-      .select('*')
-      .in('habit_id', habitIds)
-      .order('completed_at', { ascending: false })
-
-    if (completionsError) throw completionsError
-
-    // Combine data
-    const habitsWithCompletions: HabitWithCompletions[] = (habits || []).map(habit => ({
-      ...habit,
-      habit_completions: completions?.filter(completion => completion.habit_id === habit.id) || []
-    }))
-
-    return habitsWithCompletions
-  } catch (error) {
-    console.error('Error fetching habits:', error)
-    throw error
-  }
+  const { data: habits, error: habitsError } = await supabase
+    .from('habits')
+    .select('*')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false })
+  
+  if (habitsError) throw habitsError
+  
+  const { data: completions, error: completionsError } = await supabase
+    .from('habit_completions')
+    .select('*')
+    .in('habit_id', habits.map(habit => habit.id))
+    .gte('completed_at', new Date(new Date().setDate(new Date().getDate() - 30)).toISOString())
+  
+  if (completionsError) throw completionsError
+  
+  return habits.map(habit => ({
+    ...habit,
+    completions: completions.filter(completion => completion.habit_id === habit.id)
+  }))
 }
 
 // Create a new habit
-export async function createHabit(userId: string, input: CreateHabitInput): Promise<HabitWithCompletions> {
+export async function createHabit(habit: Omit<Habit, 'id' | 'created_at' | 'updated_at'>) {
   const supabase = createClient()
   
-  try {
-    // Store frequency_days as a JSON field in description for now, or you can add a new column
-    const habitData = {
-      user_id: userId,
-      title: input.title,
-      description: input.description || JSON.stringify({ 
-        type: input.habit_type || 'builder',
-        frequency_days: input.frequency_days || []
-      }),
-      frequency: input.frequency,
-      streak_count: 0
-    }
-
-    const { data: habit, error: habitError } = await supabase
-      .from('habits')
-      .insert(habitData)
-      .select()
-      .single()
-
-    if (habitError) throw habitError
-
-    return {
-      ...habit,
-      habit_completions: []
-    }
-  } catch (error) {
-    console.error('Error creating habit:', error)
-    throw error
+  const { data, error: habitError } = await supabase
+    .from('habits')
+    .insert(habit)
+    .select()
+    .single()
+  
+  if (habitError) throw habitError
+  
+  const { data: completions, error: completionsError } = await supabase
+    .from('habit_completions')
+    .select('*')
+    .eq('habit_id', data.id)
+    .gte('completed_at', new Date(new Date().setDate(new Date().getDate() - 30)).toISOString())
+  
+  if (completionsError) throw completionsError
+  
+  return {
+    ...data,
+    completions
   }
 }
 
 // Update a habit
-export async function updateHabit(habitId: string, updates: Partial<Omit<Habit, 'id' | 'user_id' | 'created_at' | 'updated_at'>>): Promise<HabitWithCompletions> {
+export async function updateHabit(id: string, updates: Partial<Habit>) {
   const supabase = createClient()
   
-  try {
-    const { data: habit, error: habitError } = await supabase
-      .from('habits')
-      .update(updates)
-      .eq('id', habitId)
-      .select()
-      .single()
-
-    if (habitError) throw habitError
-
-    // Get completions
-    const { data: completions, error: completionsError } = await supabase
-      .from('habit_completions')
-      .select('*')
-      .eq('habit_id', habitId)
-      .order('completed_at', { ascending: false })
-
-    if (completionsError) throw completionsError
-
-    return {
-      ...habit,
-      habit_completions: completions || []
-    }
-  } catch (error) {
-    console.error('Error updating habit:', error)
-    throw error
+  const { data: habit, error: habitError } = await supabase
+    .from('habits')
+    .update(updates)
+    .eq('id', id)
+    .select()
+    .single()
+  
+  if (habitError) throw habitError
+  
+  const { data: completions, error: completionsError } = await supabase
+    .from('habit_completions')
+    .select('*')
+    .eq('habit_id', id)
+    .gte('completed_at', new Date(new Date().setDate(new Date().getDate() - 30)).toISOString())
+  
+  if (completionsError) throw completionsError
+  
+  return {
+    ...habit,
+    completions
   }
 }
 
 // Complete a habit (mark as done for a specific date)
-export async function completeHabit(input: CompleteHabitInput): Promise<HabitCompletion> {
+export async function completeHabit(habitId: string) {
   const supabase = createClient()
   
-  try {
-    const completedAt = input.completed_at || new Date().toISOString()
-    
-    const { data: completion, error: completionError } = await supabase
-      .from('habit_completions')
-      .insert({
-        habit_id: input.habit_id,
-        completed_at: completedAt
-      })
-      .select()
-      .single()
-
-    if (completionError) throw completionError
-
-    // Update streak count
-    await updateHabitStreak(input.habit_id)
-
-    return completion
-  } catch (error) {
-    console.error('Error completing habit:', error)
-    throw error
-  }
+  const { data: completion, error: completionError } = await supabase
+    .from('habit_completions')
+    .insert({
+      habit_id: habitId,
+      completed_at: new Date().toISOString()
+    })
+    .select()
+    .single()
+  
+  if (completionError) throw completionError
+  return completion
 }
 
 // Remove a habit completion
@@ -172,9 +136,6 @@ export async function uncompleteHabit(habitId: string, date: string): Promise<vo
       .lte('completed_at', endOfDay)
 
     if (error) throw error
-
-    // Update streak count
-    await updateHabitStreak(habitId)
   } catch (error) {
     console.error('Error uncompleting habit:', error)
     throw error
@@ -261,20 +222,23 @@ async function updateHabitStreak(habitId: string): Promise<void> {
 }
 
 // Delete a habit
-export async function deleteHabit(habitId: string): Promise<void> {
+export async function deleteHabit(id: string) {
   const supabase = createClient()
   
-  try {
-    const { error } = await supabase
-      .from('habits')
-      .delete()
-      .eq('id', habitId)
-
-    if (error) throw error
-  } catch (error) {
-    console.error('Error deleting habit:', error)
-    throw error
-  }
+  // Delete related completions first
+  const { error: completionsError } = await supabase
+    .from('habit_completions')
+    .delete()
+    .eq('habit_id', id)
+  
+  if (completionsError) throw completionsError
+  
+  const { error } = await supabase
+    .from('habits')
+    .delete()
+    .eq('id', id)
+  
+  if (error) throw error
 }
 
 // Define types for real-time change payloads
@@ -286,11 +250,14 @@ interface RealtimeChangePayload {
 }
 
 // Subscribe to real-time changes for habits
-export function subscribeToHabitChanges(userId: string, callback: (payload: RealtimeChangePayload) => void) {
+export function subscribeToHabits(
+  userId: string,
+  callback: (payload: RealtimePostgresChangesPayload<Habit>) => void
+) {
   const supabase = createClient()
   
   const subscription = supabase
-    .channel('habits_changes')
+    .channel('habits')
     .on(
       'postgres_changes',
       {
@@ -299,34 +266,61 @@ export function subscribeToHabitChanges(userId: string, callback: (payload: Real
         table: 'habits',
         filter: `user_id=eq.${userId}`
       },
-      (payload) => {
-        console.log('Habits table change:', payload)
-        callback({
-          ...payload,
-          table: 'habits',
-          eventType: payload.eventType
-        })
-      }
+      callback
     )
-    .on(
-      'postgres_changes',
-      {
-        event: '*',
-        schema: 'public',
-        table: 'habit_completions'
-      },
-      (payload) => {
-        console.log('Habit completions change:', payload)
-        callback({
-          ...payload,
-          table: 'habit_completions',
-          eventType: payload.eventType
-        })
-      }
-    )
-    .subscribe((status) => {
-      console.log('Habits subscription status:', status)
-    })
-
+    .subscribe()
+  
   return subscription
+}
+
+export async function getHabitStats(habitId: string) {
+  const supabase = createClient()
+  
+  const { data, error } = await supabase
+    .from('habit_completions')
+    .select('completed_at')
+    .eq('habit_id', habitId)
+    .order('completed_at', { ascending: false })
+  
+  if (error) throw error
+  
+  return {
+    totalCompletions: data.length,
+    lastCompletion: data[0]?.completed_at || null,
+    streak: calculateStreak(data.map(c => new Date(c.completed_at)))
+  }
+}
+
+function calculateStreak(dates: Date[]): number {
+  if (dates.length === 0) return 0
+  
+  let streak = 1
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  
+  const sortedDates = dates.sort((a, b) => b.getTime() - a.getTime())
+  const lastDate = new Date(sortedDates[0])
+  lastDate.setHours(0, 0, 0, 0)
+  
+  // If the last completion was not today or yesterday, streak is broken
+  const dayDiff = Math.floor((today.getTime() - lastDate.getTime()) / (1000 * 60 * 60 * 24))
+  if (dayDiff > 1) return 0
+  
+  // Calculate streak
+  for (let i = 1; i < sortedDates.length; i++) {
+    const currentDate = new Date(sortedDates[i])
+    currentDate.setHours(0, 0, 0, 0)
+    
+    const prevDate = new Date(sortedDates[i - 1])
+    prevDate.setHours(0, 0, 0, 0)
+    
+    const diff = Math.floor((prevDate.getTime() - currentDate.getTime()) / (1000 * 60 * 60 * 24))
+    if (diff === 1) {
+      streak++
+    } else {
+      break
+    }
+  }
+  
+  return streak
 }

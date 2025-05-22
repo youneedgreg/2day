@@ -1,6 +1,7 @@
 // lib/utils/database/reminders.ts
-import { createClient } from '@/lib/utils/supabase/client'
-import { Database } from '@/lib/types/database'
+import { createClient } from '@/lib/supabaseClient'
+import type { Database } from '@/lib/supabaseClient'
+import type { RealtimePostgresChangesPayload } from '@supabase/supabase-js'
 
 type Reminder = Database['public']['Tables']['reminders']['Row']
 
@@ -24,144 +25,104 @@ export interface UpdateReminderInput {
 }
 
 // Get all reminders for a user
-export async function getReminders(userId: string): Promise<Reminder[]> {
+export async function getReminders(userId: string) {
   const supabase = createClient()
   
-  try {
-    const { data: reminders, error } = await supabase
-      .from('reminders')
-      .select('*')
-      .eq('user_id', userId)
-      .neq('status', 'dismissed')
-      .order('reminder_time', { ascending: true })
-
-    if (error) throw error
-    return reminders || []
-  } catch (error) {
-    console.error('Error fetching reminders:', error)
-    throw error
-  }
+  const { data: reminders, error } = await supabase
+    .from('reminders')
+    .select('*')
+    .eq('user_id', userId)
+    .order('due_date', { ascending: true })
+  
+  if (error) throw error
+  return reminders
 }
 
 // Create a new reminder
-export async function createReminder(userId: string, input: CreateReminderInput): Promise<Reminder> {
+export async function createReminder(reminder: Omit<Reminder, 'id' | 'created_at' | 'updated_at'>) {
   const supabase = createClient()
   
-  try {
-    const reminderData = {
-      user_id: userId,
-      title: input.title,
-      description: input.description || null,
-      reminder_time: input.reminder_time,
-      repeat_frequency: input.repeat_frequency || 'none',
-      status: 'pending' as const,
-      priority: input.priority || 'medium',
-      space_id: input.space_id || null
-    }
-
-    const { data: reminder, error } = await supabase
-      .from('reminders')
-      .insert(reminderData)
-      .select()
-      .single()
-
-    if (error) throw error
-    return reminder
-  } catch (error) {
-    console.error('Error creating reminder:', error)
-    throw error
-  }
+  const { data, error } = await supabase
+    .from('reminders')
+    .insert(reminder)
+    .select()
+    .single()
+  
+  if (error) throw error
+  return data
 }
 
 // Update a reminder
-export async function updateReminder(reminderId: string, updates: UpdateReminderInput): Promise<Reminder> {
+export async function updateReminder(id: string, updates: Partial<Reminder>) {
   const supabase = createClient()
   
-  try {
-    const { data: reminder, error } = await supabase
-      .from('reminders')
-      .update(updates)
-      .eq('id', reminderId)
-      .select()
-      .single()
-
-    if (error) throw error
-    return reminder
-  } catch (error) {
-    console.error('Error updating reminder:', error)
-    throw error
-  }
+  const { data: reminder, error } = await supabase
+    .from('reminders')
+    .update(updates)
+    .eq('id', id)
+    .select()
+    .single()
+  
+  if (error) throw error
+  return reminder
 }
 
-// Mark reminder as completed
-export async function completeReminder(reminderId: string): Promise<Reminder> {
-  return updateReminder(reminderId, { status: 'completed' })
-}
-
-// Mark reminder as dismissed (delete)
-export async function dismissReminder(reminderId: string): Promise<void> {
+// Delete a reminder
+export async function deleteReminder(id: string) {
   const supabase = createClient()
   
-  try {
-    const { error } = await supabase
-      .from('reminders')
-      .update({ status: 'dismissed' })
-      .eq('id', reminderId)
+  const { error } = await supabase
+    .from('reminders')
+    .delete()
+    .eq('id', id)
+  
+  if (error) throw error
+}
 
-    if (error) throw error
-  } catch (error) {
-    console.error('Error dismissing reminder:', error)
-    throw error
-  }
+// Get reminders by space
+export async function getRemindersBySpace(spaceId: string) {
+  const supabase = createClient()
+  
+  const { data: reminders, error } = await supabase
+    .from('reminders')
+    .select('*')
+    .eq('space_id', spaceId)
+    .order('due_date', { ascending: true })
+  
+  if (error) throw error
+  return reminders
 }
 
 // Get upcoming reminders (next 7 days)
-export async function getUpcomingReminders(userId: string): Promise<Reminder[]> {
+export async function getUpcomingReminders(userId: string) {
   const supabase = createClient()
   
-  try {
-    const now = new Date()
-    const nextWeek = new Date()
-    nextWeek.setDate(now.getDate() + 7)
-
-    const { data: reminders, error } = await supabase
-      .from('reminders')
-      .select('*')
-      .eq('user_id', userId)
-      .eq('status', 'pending')
-      .gte('reminder_time', now.toISOString())
-      .lte('reminder_time', nextWeek.toISOString())
-      .order('reminder_time', { ascending: true })
-
-    if (error) throw error
-    return reminders || []
-  } catch (error) {
-    console.error('Error fetching upcoming reminders:', error)
-    throw error
-  }
+  const { data: reminders, error } = await supabase
+    .from('reminders')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('completed', false)
+    .gte('due_date', new Date().toISOString())
+    .order('due_date', { ascending: true })
+  
+  if (error) throw error
+  return reminders
 }
 
 // Get overdue reminders
-export async function getOverdueReminders(userId: string): Promise<Reminder[]> {
+export async function getOverdueReminders(userId: string) {
   const supabase = createClient()
   
-  try {
-    const now = new Date().toISOString()
-
-    const { data: reminders, error } = await supabase
-      .from('reminders')
-      .select('*')
-      .eq('user_id', userId)
-      .eq('status', 'pending')
-      .lt('reminder_time', now)
-      .order('reminder_time', { ascending: false })
-
-    if (error) throw error
-    return reminders || []
-  } catch (error) {
-    console.error('Error fetching overdue reminders:', error)
-    throw error
-  }
+  const { data: reminders, error } = await supabase
+    .from('reminders')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('completed', false)
+    .lt('due_date', new Date().toISOString())
+    .order('due_date', { ascending: true })
+  
+  if (error) throw error
+  return reminders
 }
 
 // Search reminders
@@ -185,26 +146,15 @@ export async function searchReminders(userId: string, query: string): Promise<Re
   }
 }
 
-// Define types for real-time changes
-type RealtimeChangePayload = {
-  schema: string
-  table: string
-  commit_timestamp: string
-  eventType: 'INSERT' | 'UPDATE' | 'DELETE'
-  new: Record<string, unknown> | null
-  old: Record<string, unknown> | null
-  errors: string[]
-}
-
 // Subscribe to real-time changes for reminders
-export function subscribeToReminderChanges(
+export function subscribeToReminders(
   userId: string,
-  callback: (payload: RealtimeChangePayload) => void
+  callback: (payload: RealtimePostgresChangesPayload<Reminder>) => void
 ) {
   const supabase = createClient()
   
   const subscription = supabase
-    .channel('reminders_changes')
+    .channel('reminders')
     .on(
       'postgres_changes',
       {
@@ -213,14 +163,9 @@ export function subscribeToReminderChanges(
         table: 'reminders',
         filter: `user_id=eq.${userId}`
       },
-      (payload) => {
-        console.log('Reminders table change:', payload)
-        callback(payload as RealtimeChangePayload)
-      }
+      callback
     )
-    .subscribe((status) => {
-      console.log('Reminders subscription status:', status)
-    })
-
+    .subscribe()
+  
   return subscription
 }

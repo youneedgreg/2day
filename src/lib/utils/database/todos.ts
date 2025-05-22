@@ -1,6 +1,6 @@
 // lib/utils/database/todos.ts
-import { createClient } from '@/lib/utils/supabase/client'
-import { Database } from '@/lib/types/database'
+import { createClient } from '@/lib/supabaseClient'
+import type { Database } from '@/lib/supabaseClient'
 
 type Todo = Database['public']['Tables']['todos']['Row']
 type TodoNote = Database['public']['Tables']['todo_notes']['Row']
@@ -48,68 +48,33 @@ type RealtimeChangePayload = {
 export async function getTodos(userId: string): Promise<TodoWithRelations[]> {
   const supabase = createClient()
   
-  try {
-    // Get todos
-    const { data: todos, error: todosError } = await supabase
-      .from('todos')
-      .select('*')
-      .eq('user_id', userId)
-      .neq('status', 'archived')
-      .order('created_at', { ascending: false })
-
-    if (todosError) throw todosError
-
-    // Get notes for all todos
-    const todoIds = todos?.map(t => t.id) || []
-    const { data: notes, error: notesError } = await supabase
-      .from('todo_notes')
-      .select('*')
-      .in('todo_id', todoIds)
-      .order('created_at', { ascending: true })
-
-    if (notesError) throw notesError
-
-    // Get timers for all todos
-    const { data: timers, error: timersError } = await supabase
-      .from('todo_timers')
-      .select('*')
-      .in('todo_id', todoIds)
-
-    if (timersError) throw timersError
-
-    // Combine data
-    const todosWithRelations: TodoWithRelations[] = (todos || []).map(todo => ({
-      ...todo,
-      notes: notes?.filter(note => note.todo_id === todo.id) || [],
-      timer: timers?.find(timer => timer.todo_id === todo.id) || null,
-      children: []
-    }))
-
-    // Build hierarchy
-    const rootTodos: TodoWithRelations[] = []
-    const todoMap = new Map<string, TodoWithRelations>()
-
-    // First pass: create map
-    todosWithRelations.forEach(todo => {
-      todoMap.set(todo.id, todo)
-    })
-
-    // Second pass: build hierarchy
-    todosWithRelations.forEach(todo => {
-      if (todo.parent_id && todoMap.has(todo.parent_id)) {
-        const parent = todoMap.get(todo.parent_id)!
-        if (!parent.children) parent.children = []
-        parent.children.push(todo)
-      } else {
-        rootTodos.push(todo)
-      }
-    })
-
-    return rootTodos
-  } catch (error) {
-    console.error('Error fetching todos:', error)
-    throw error
-  }
+  const { data: todos, error: todosError } = await supabase
+    .from('todos')
+    .select('*')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false })
+  
+  if (todosError) throw todosError
+  
+  const { data: notes, error: notesError } = await supabase
+    .from('todo_notes')
+    .select('*')
+    .in('todo_id', todos.map(todo => todo.id))
+  
+  if (notesError) throw notesError
+  
+  const { data: timers, error: timersError } = await supabase
+    .from('todo_timers')
+    .select('*')
+    .in('todo_id', todos.map(todo => todo.id))
+  
+  if (timersError) throw timersError
+  
+  return todos.map(todo => ({
+    ...todo,
+    notes: notes.filter(note => note.todo_id === todo.id),
+    timer: timers.find(timer => timer.todo_id === todo.id)
+  }))
 }
 
 // Create a new todo
