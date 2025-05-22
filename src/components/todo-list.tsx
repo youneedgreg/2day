@@ -10,7 +10,7 @@ import {
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Card, CardContent} from "@/components/ui/card"
+import { Card, CardContent } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
@@ -20,7 +20,7 @@ import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Progress } from "@/components/ui/progress"
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerFooter } from "@/components/ui/drawer"
 import { cn } from "@/lib/utils"
@@ -34,13 +34,18 @@ import {
   updateTodoTimer,
   addTimerToTodo,
   subscribeToTodoChanges,
-  type TodoWithRelations 
+  type TodoWithRelations as DatabaseTodoWithRelations
 } from '@/lib/utils/database/todos'
 import { toast } from 'sonner'
 
+// Define local types
+type TodoPriority = 'low' | 'medium' | 'high'
+type TodoWithRelations = Omit<DatabaseTodoWithRelations, 'priority'> & {
+  priority: TodoPriority
+}
+
 // Mock types and data for demo
 type TodoStatus = 'pending' | 'completed' | 'archived'
-type TodoPriority = 'low' | 'medium' | 'high'
 
 type TodoNote = {
   id: string
@@ -58,23 +63,6 @@ type TodoTimer = {
   completed: boolean
   created_at: string
   updated_at: string
-}
-
-type TodoWithRelations = {
-  id: string
-  title: string
-  status: TodoStatus
-  priority: TodoPriority
-  description: string | null
-  due_date: string | null
-  user_id: string
-  parent_id: string | null
-  is_expanded: boolean
-  created_at: string
-  updated_at: string
-  children: TodoWithRelations[]
-  notes: TodoNote[]
-  timer?: TodoTimer
 }
 
 // Mock data
@@ -220,7 +208,12 @@ export default function TodoList() {
     if (!user) return
     try {
       const data = await getTodos(user.id)
-      setTodos(data)
+      // Convert database todos to local type
+      const convertedTodos: TodoWithRelations[] = data.map(todo => ({
+        ...todo,
+        priority: todo.priority || 'medium' // Convert null to 'medium'
+      }))
+      setTodos(convertedTodos)
     } catch (error) {
       console.error('Error fetching todos:', error)
       toast.error('Failed to load todos')
@@ -598,6 +591,14 @@ export default function TodoList() {
       scale: 0.95,
       transition: { duration: 0.2 }
     }
+  }
+
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center py-20">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+      </div>
+    )
   }
 
   return (
