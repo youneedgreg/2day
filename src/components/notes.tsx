@@ -589,6 +589,18 @@ export default function Notes() {
   const [canRedo, setCanRedo] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
 
+  // Add this near the top of the component, after the state declarations
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
+
+  // Add this useEffect for debouncing
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchQuery(searchQuery);
+    }, 300); // 300ms delay
+
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
   const initializeData = useCallback(async () => {
     if (!user) return
     
@@ -633,61 +645,77 @@ export default function Notes() {
     }
   }, [user])
 
-  const filterNotes = useCallback(() => {
-    let filtered = notes.filter(note => showArchived ? note.is_archived : !note.is_archived)
+  const filterNotes = useCallback(async () => {
+    if (!user) return;
+    
+    try {
+      let filtered: ExtendedNote[] = [];
+      
+      // Apply active tab filter
+      switch (activeTab) {
+        case 'pinned':
+          filtered = notes.filter(note => note.metadata?.is_pinned);
+          break;
+        case 'recent':
+          filtered = notes.filter(note => {
+            const isRecent = dayjs().diff(dayjs(note.updated_at), 'day') <= 7;
+            return isRecent;
+          });
+          break;
+        case 'starred':
+          filtered = notes.filter(note => note.metadata?.is_favorite);
+          break;
+        default:
+          // If we have a search query or tag filter, use server-side filtering
+          if (debouncedSearchQuery || selectedTag) {
+            if (debouncedSearchQuery && selectedTag) {
+              // If both search and tag are present, get notes by tag first
+              const tagNotes = await getNotesByTag(user.id, selectedTag);
+              // Then filter those notes by search query
+              filtered = tagNotes.filter(note =>
+                note.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                (note.content && note.content.toLowerCase().includes(searchQuery.toLowerCase())) ||
+                (note.tags && note.tags.some(tag => tag.toLowerCase().includes(searchQuery.toLowerCase())))
+              );
+            } else if (searchQuery) {
+              // If only search query is present
+              filtered = await searchNotes(user.id, searchQuery);
+            } else if (selectedTag) {
+              // If only tag is present
+              filtered = await getNotesByTag(user.id, selectedTag);
+            }
+          } else {
+            // If no search or tag filter, use all notes
+            filtered = notes;
+          }
+      }
 
-    // Apply active tab filter
-    switch (activeTab) {
-      case 'pinned':
-        filtered = filtered.filter(note => note.metadata?.is_pinned)
-        break
-      case 'recent':
-        filtered = filtered.filter(note => {
-          const isRecent = dayjs().diff(dayjs(note.updated_at), 'day') <= 7
-          return isRecent
-        })
-        break
-      case 'starred':
-        filtered = filtered.filter(note => note.metadata?.is_favorite)
-        break
+      // Apply color filter
+      if (selectedColor) {
+        filtered = filtered.filter(note => note.color === selectedColor);
+      }
+
+      // Apply type filter
+      if (selectedType) {
+        filtered = filtered.filter(note => note.note_type === selectedType);
+      }
+
+      // Apply archive filter
+      filtered = filtered.filter(note => showArchived ? note.is_archived : !note.is_archived);
+
+      // Sort: pinned first, then by updated date
+      filtered.sort((a, b) => {
+        if (a.metadata?.is_pinned && !b.metadata?.is_pinned) return -1;
+        if (!a.metadata?.is_pinned && b.metadata?.is_pinned) return 1;
+        return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime();
+      });
+
+      setFilteredNotes(filtered);
+    } catch (error) {
+      console.error('Error filtering notes:', error);
+      toast.error('Failed to filter notes');
     }
-
-    // Search filter
-    if (searchQuery) {
-      const query = searchQuery.toLowerCase()
-      filtered = filtered.filter(note =>
-        note.title.toLowerCase().includes(query) ||
-        (note.content && note.content.toLowerCase().includes(query)) ||
-        (note.tags && note.tags.some(tag => tag.toLowerCase().includes(query)))
-      )
-    }
-
-    // Tag filter
-    if (selectedTag) {
-      filtered = filtered.filter(note =>
-        note.tags && note.tags.includes(selectedTag)
-      )
-    }
-
-    // Color filter
-    if (selectedColor) {
-      filtered = filtered.filter(note => note.color === selectedColor)
-    }
-
-    // Type filter
-    if (selectedType) {
-      filtered = filtered.filter(note => note.note_type === selectedType)
-    }
-
-    // Sort: pinned first, then by updated date
-    filtered.sort((a, b) => {
-      if (a.metadata?.is_pinned && !b.metadata?.is_pinned) return -1
-      if (!a.metadata?.is_pinned && b.metadata?.is_pinned) return 1
-      return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
-    })
-
-    setFilteredNotes(filtered)
-  }, [notes, searchQuery, selectedTag, selectedColor, selectedType, showArchived, activeTab])
+  }, [notes, searchQuery, selectedTag, selectedColor, selectedType, showArchived, activeTab, user]);
 
   useEffect(() => {
     if (!user) return
