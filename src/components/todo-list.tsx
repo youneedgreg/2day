@@ -4,9 +4,8 @@ import { useState, useEffect } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { 
   Plus, Trash2, ListTodo, CheckCircle2, CircleSlash, Sparkles, 
-  Clock,  X, 
-  Focus,  AlignLeft, Edit, Timer, Target,
-  Calendar,  Archive, MoreVertical, Zap, TrendingUp,
+  Clock, X, Focus, AlignLeft, Edit, Timer, Target,
+  Calendar, Archive, MoreVertical, Zap, TrendingUp,
   BookOpen, CheckSquare, Flame, Play, Pause, RotateCcw
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -25,6 +24,19 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Progress } from "@/components/ui/progress"
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerFooter } from "@/components/ui/drawer"
 import { cn } from "@/lib/utils"
+import { useAuth } from '@/hooks/useAuth'
+import { 
+  getTodos, 
+  createTodo, 
+  updateTodo, 
+  addNoteToTodo, 
+  deleteNote, 
+  updateTodoTimer,
+  addTimerToTodo,
+  subscribeToTodoChanges,
+  type TodoWithRelations 
+} from '@/lib/utils/database/todos'
+import { toast } from 'sonner'
 
 // Mock types and data for demo
 type TodoStatus = 'pending' | 'completed' | 'archived'
@@ -166,9 +178,10 @@ const formatTime = (timeInSeconds: number): string => {
 }
 
 export default function TodoList() {
-  const [todos, setTodos] = useState<TodoWithRelations[]>(mockTodos)
+  const { user } = useAuth()
+  const [todos, setTodos] = useState<TodoWithRelations[]>([])
   const [newTodo, setNewTodo] = useState('')
-  const [] = useState(false)
+  const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState<"all" | "active" | "completed">("all")
   const [isFocusMode, setIsFocusMode] = useState(false)
   const [editingTodoId, setEditingTodoId] = useState<string | null>(null)
@@ -184,6 +197,37 @@ export default function TodoList() {
   const [activeTimerId, setActiveTimerId] = useState<string | null>(null)
   const [isSelectionMode, setIsSelectionMode] = useState(false)
   const [selectedTodos, setSelectedTodos] = useState<string[]>([])
+
+  useEffect(() => {
+    if (!user) return
+
+    fetchTodos()
+
+    // Subscribe to real-time updates
+    const subscription = subscribeToTodoChanges(user.id, (payload) => {
+      console.log('Real-time update:', payload)
+      // Refetch todos on any change for simplicity
+      // In production, you might want to handle specific events for better performance
+      fetchTodos()
+    })
+
+    return () => {
+      subscription.unsubscribe()
+    }
+  }, [user])
+
+  const fetchTodos = async () => {
+    if (!user) return
+    try {
+      const data = await getTodos(user.id)
+      setTodos(data)
+    } catch (error) {
+      console.error('Error fetching todos:', error)
+      toast.error('Failed to load todos')
+    } finally {
+      setLoading(false)
+    }
+  }
 
   // Initialize active timers from todos
   useEffect(() => {
@@ -239,155 +283,204 @@ export default function TodoList() {
   }, [activeTimers])
 
   const handleCreateTodo = async () => {
-    if (!newTodo.trim()) return
+    if (!user || !newTodo.trim()) return
 
-    const newTodoObj: TodoWithRelations = {
-      id: `todo-${Date.now()}`,
-      title: newTodo.trim(),
-      status: 'pending',
-      priority: newTodoPriority,
-      description: null,
-      due_date: null,
-      user_id: 'user1',
-      parent_id: newTodoParentId || null,
-      is_expanded: true,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-      children: [],
-      notes: [],
-      ...(newTodoHasTimer && {
-        timer: {
-          id: `timer-${Date.now()}`,
-          todo_id: `todo-${Date.now()}`,
-          duration_minutes: newTodoTimerDuration,
-          start_time: null,
-          paused_time_remaining: null,
-          is_running: false,
-          completed: false,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        }
-      })
+    try {
+      const todoInput = {
+        title: newTodo.trim(),
+        parent_id: newTodoParentId,
+        ...(newTodoHasTimer && {
+          timer: {
+            duration_minutes: newTodoTimerDuration
+          }
+        })
+      }
+
+      await createTodo(user.id, todoInput)
+      await fetchTodos() // Refresh the list after creating
+      
+      // Clear form state
+      setNewTodo('')
+      setNewTodoHasTimer(false)
+      setNewTodoTimerDuration(25)
+      setNewTodoPriority('medium')
+      setNewTodoDialogOpen(false)
+      setNewTodoParentId(undefined)
+
+      toast.success('Todo created successfully')
+    } catch (error) {
+      console.error('Error creating todo:', error)
+      toast.error('Failed to create todo')
     }
-
-    setTodos(prev => [newTodoObj, ...prev])
-    
-    // Reset form
-    setNewTodo('')
-    setNewTodoHasTimer(false)
-    setNewTodoTimerDuration(25)
-    setNewTodoPriority('medium')
-    setNewTodoDialogOpen(false)
-    setNewTodoParentId(undefined)
   }
 
-  const handleToggleTodo = (todo: TodoWithRelations) => {
-    setTodos(prev => prev.map(t => 
-      t.id === todo.id 
-        ? { ...t, status: t.status === 'completed' ? 'pending' : 'completed' }
-        : t
-    ))
+  const handleToggleTodo = async (todo: TodoWithRelations) => {
+    try {
+      await updateTodo(todo.id, {
+        status: todo.status === 'completed' ? 'pending' : 'completed',
+      })
+      
+      // If completing a todo with a running timer, stop the timer
+      if (todo.status === 'pending' && todo.timer?.is_running) {
+        await updateTodoTimer(todo.id, {
+          is_running: false,
+          completed: true
+        })
+      }
+      
+      await fetchTodos() // Refresh the list after updating
+      toast.success(todo.status === 'pending' ? 'Todo completed!' : 'Todo reopened')
+    } catch (error) {
+      console.error('Error updating todo:', error)
+      toast.error('Failed to update todo')
+    }
   }
 
-  const handleDeleteTodo = (todoId: string) => {
-    setTodos(prev => prev.filter(t => t.id !== todoId))
+  const handleDeleteTodo = async (todoId: string) => {
+    try {
+      await updateTodo(todoId, { status: 'archived' })
+      await fetchTodos() // Refresh the list after deleting
+      toast.success('Todo deleted')
+    } catch (error) {
+      console.error('Error deleting todo:', error)
+      toast.error('Failed to delete todo')
+    }
   }
 
-  const handleEditTodo = (todoId: string, newTitle: string) => {
+  const handleUpdateExpansion = async (todoId: string, isExpanded: boolean) => {
+    try {
+      await updateTodo(todoId, { is_expanded: isExpanded })
+      await fetchTodos() // Refresh the list after updating
+    } catch (error) {
+      console.error('Error updating expansion:', error)
+    }
+  }
+
+  const handleEditTodo = async (todoId: string, newTitle: string) => {
     if (!newTitle.trim()) return
     
-    setTodos(prev => prev.map(t => 
-      t.id === todoId 
-        ? { ...t, title: newTitle.trim() }
-        : t
-    ))
-    
-    setEditingTodoId(null)
-    setEditText("")
-  }
-
-  const handleStartTimer = (todoId: string) => {
-    const todo = findTodoById(todoId)
-    if (!todo?.timer) return
-
-    const durationMs = todo.timer.duration_minutes * 60 * 1000
-    const remainingMs = todo.timer.paused_time_remaining 
-      ? todo.timer.paused_time_remaining * 1000
-      : durationMs
-    
-    setActiveTimers(prev => ({ 
-      ...prev, 
-      [todoId]: Math.ceil(remainingMs / 1000) 
-    }))
-    setActiveTimerId(todoId)
-
-    // Update todo timer status
-    setTodos(prev => prev.map(t => 
-      t.id === todoId && t.timer
-        ? { 
-            ...t, 
-            timer: { 
-              ...t.timer, 
-              is_running: true,
-              start_time: new Date().toISOString(),
-              paused_time_remaining: null
-            } 
-          }
-        : t
-    ))
-  }
-
-  const handlePauseTimer = (todoId: string) => {
-    const remainingSeconds = activeTimers[todoId] || 0
-    
-    setTodos(prev => prev.map(t => 
-      t.id === todoId && t.timer
-        ? { 
-            ...t, 
-            timer: { 
-              ...t.timer, 
-              is_running: false,
-              paused_time_remaining: remainingSeconds
-            } 
-          }
-        : t
-    ))
-
-    setActiveTimers(prev => {
-      const newTimers = { ...prev }
-      delete newTimers[todoId]
-      return newTimers
-    })
-
-    if (activeTimerId === todoId) {
-      setActiveTimerId(null)
+    try {
+      await updateTodo(todoId, { title: newTitle.trim() })
+      await fetchTodos() // Refresh the list after editing
+      
+      // Clear editing state
+      setEditingTodoId(null)
+      setEditText("")
+      
+      toast.success('Todo updated')
+    } catch (error) {
+      console.error('Error updating todo:', error)
+      toast.error('Failed to update todo')
     }
   }
 
-  const handleResetTimer = (todoId: string) => {
-    setTodos(prev => prev.map(t => 
-      t.id === todoId && t.timer
-        ? { 
-            ...t, 
-            timer: { 
-              ...t.timer, 
-              is_running: false,
-              start_time: null,
-              paused_time_remaining: null,
-              completed: false
-            } 
-          }
-        : t
-    ))
+  const handleAddNote = async (todoId: string) => {
+    if (!newNoteContent.trim()) return
+    
+    try {
+      await addNoteToTodo(todoId, newNoteContent.trim())
+      await fetchTodos() // Refresh the list after adding note
+      setNewNoteContent("")
+      setSelectedTodoForNote(null)
+      toast.success('Note added')
+    } catch (error) {
+      console.error('Error adding note:', error)
+      toast.error('Failed to add note')
+    }
+  }
 
-    setActiveTimers(prev => {
-      const newTimers = { ...prev }
-      delete newTimers[todoId]
-      return newTimers
-    })
+  const handleDeleteNote = async (noteId: string) => {
+    try {
+      await deleteNote(noteId)
+      await fetchTodos() // Refresh the list after deleting note
+      toast.success('Note deleted')
+    } catch (error) {
+      console.error('Error deleting note:', error)
+      toast.error('Failed to delete note')
+    }
+  }
 
-    if (activeTimerId === todoId) {
-      setActiveTimerId(null)
+  const handleAddTimer = async (todoId: string) => {
+    try {
+      await addTimerToTodo(todoId, 25)
+      await fetchTodos() // Refresh the list after adding timer
+      toast.success('Timer added')
+    } catch (error) {
+      console.error('Error adding timer:', error)
+      toast.error('Failed to add timer')
+    }
+  }
+
+  const handleStartTimer = async (todoId: string) => {
+    try {
+      const todo = findTodoById(todoId)
+      if (!todo?.timer) return
+
+      const startTime = todo.timer.paused_time_remaining 
+        ? new Date(Date.now() - ((todo.timer.duration_minutes * 60) - todo.timer.paused_time_remaining) * 1000).toISOString()
+        : new Date().toISOString()
+
+      await updateTodoTimer(todoId, {
+        start_time: startTime,
+        paused_time_remaining: null,
+        is_running: true,
+        completed: false
+      })
+      
+      await fetchTodos() // Refresh the list after starting timer
+      setActiveTimerId(todoId)
+      toast.success('Timer started')
+    } catch (error) {
+      console.error('Error starting timer:', error)
+      toast.error('Failed to start timer')
+    }
+  }
+
+  const handlePauseTimer = async (todoId: string) => {
+    try {
+      const remainingSeconds = activeTimers[todoId] || 0
+      
+      await updateTodoTimer(todoId, {
+        is_running: false,
+        paused_time_remaining: remainingSeconds
+      })
+      
+      await fetchTodos() // Refresh the list after pausing timer
+      
+      if (activeTimerId === todoId) {
+        setActiveTimerId(null)
+      }
+      toast.success('Timer paused')
+    } catch (error) {
+      console.error('Error pausing timer:', error)
+      toast.error('Failed to pause timer')
+    }
+  }
+
+  const handleResetTimer = async (todoId: string) => {
+    try {
+      await updateTodoTimer(todoId, {
+        start_time: null,
+        paused_time_remaining: null,
+        is_running: false,
+        completed: false
+      })
+      
+      await fetchTodos() // Refresh the list after resetting timer
+      
+      setActiveTimers(prev => {
+        const newTimers = {...prev}
+        delete newTimers[todoId]
+        return newTimers
+      })
+      
+      if (activeTimerId === todoId) {
+        setActiveTimerId(null)
+      }
+      toast.success('Timer reset')
+    } catch (error) {
+      console.error('Error resetting timer:', error)
+      toast.error('Failed to reset timer')
     }
   }
 
@@ -416,33 +509,6 @@ export default function TodoList() {
         icon: "/favicon.ico"
       })
     }
-  }
-
-  const handleAddNote = () => {
-    if (!newNoteContent.trim() || !selectedTodoForNote) return
-    
-    const newNote: TodoNote = {
-      id: `note-${Date.now()}`,
-      content: newNoteContent.trim(),
-      created_at: new Date().toISOString()
-    }
-
-    setTodos(prev => prev.map(t => 
-      t.id === selectedTodoForNote
-        ? { ...t, notes: [...t.notes, newNote] }
-        : t
-    ))
-
-    setNewNoteContent("")
-    setSelectedTodoForNote(null)
-  }
-
-  const handleDeleteNote = (todoId: string, noteId: string) => {
-    setTodos(prev => prev.map(t => 
-      t.id === todoId
-        ? { ...t, notes: t.notes.filter(n => n.id !== noteId) }
-        : t
-    ))
   }
 
   const findTodoById = (id: string): TodoWithRelations | null => {
@@ -1143,7 +1209,7 @@ export default function TodoList() {
                     onChange={(e) => setNewNoteContent(e.target.value)}
                     className="min-h-[100px] resize-none"
                   />
-                  <Button onClick={handleAddNote} className="w-full">
+                  <Button onClick={() => handleAddNote(selectedTodoForNote)} className="w-full">
                     <Plus className="h-4 w-4 mr-2" />
                     Add Note
                   </Button>
@@ -1158,7 +1224,7 @@ export default function TodoList() {
                           variant="ghost" 
                           size="sm" 
                           className="h-7 w-7 p-0 ml-3 hover:bg-red-500/10 hover:text-red-500" 
-                          onClick={() => handleDeleteNote(selectedTodoForNote, note.id)}
+                          onClick={() => handleDeleteNote(note.id)}
                         >
                           <X className="h-3 w-3" />
                         </Button>
