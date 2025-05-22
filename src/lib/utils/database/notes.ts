@@ -4,13 +4,41 @@ import { Database } from '@/lib/types/database'
 
 type Note = Database['public']['Tables']['notes']['Row']
 
+// Define types for metadata
+interface RichTextMetadata {
+  format?: {
+    bold?: boolean
+    italic?: boolean
+    underline?: boolean
+    // Add other rich text formatting options as needed
+  }
+}
+
+interface DrawingMetadata {
+  paths?: Array<{
+    points: Array<{ x: number; y: number }>
+    color: string
+    width: number
+  }>
+}
+
+interface ChecklistMetadata {
+  items?: Array<{
+    id: string
+    text: string
+    completed: boolean
+  }>
+}
+
+type NoteMetadata = RichTextMetadata | DrawingMetadata | ChecklistMetadata | Record<string, unknown>
+
 export interface CreateNoteInput {
   title: string
   content?: string
   color?: string
   tags?: string[]
   note_type?: 'text' | 'rich_text' | 'drawing' | 'checklist'
-  metadata?: any // For storing rich text formatting, drawing data, etc.
+  metadata?: NoteMetadata
 }
 
 export interface UpdateNoteInput {
@@ -19,7 +47,7 @@ export interface UpdateNoteInput {
   color?: string
   tags?: string[]
   note_type?: 'text' | 'rich_text' | 'drawing' | 'checklist'
-  metadata?: any
+  metadata?: NoteMetadata
 }
 
 // Get all notes for a user
@@ -255,7 +283,15 @@ export async function duplicateNote(userId: string, noteId: string): Promise<Not
 }
 
 // Subscribe to real-time changes for notes
-export function subscribeToNotesChanges(userId: string, callback: (payload: any) => void) {
+export function subscribeToNotesChanges(
+  userId: string,
+  callback: (payload: {
+    table: string
+    eventType: 'INSERT' | 'UPDATE' | 'DELETE'
+    new: Note | null
+    old: Note | null
+  }) => void
+) {
   const supabase = createClient()
   
   const subscription = supabase
@@ -271,9 +307,10 @@ export function subscribeToNotesChanges(userId: string, callback: (payload: any)
       (payload) => {
         console.log('Notes table change:', payload)
         callback({
-          ...payload,
           table: 'notes',
-          eventType: payload.eventType
+          eventType: payload.eventType,
+          new: payload.new as Note | null,
+          old: payload.old as Note | null
         })
       }
     )
