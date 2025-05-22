@@ -61,6 +61,7 @@ dayjs.extend(customParseFormat)
 
 // Define types
 type Priority = "low" | "medium" | "high"
+type RepeatFrequency = "none" | "daily" | "weekly" | "monthly"
 type Reminder = Database['public']['Tables']['reminders']['Row'] & {
   location?: string;
   tags?: string[];
@@ -68,7 +69,6 @@ type Reminder = Database['public']['Tables']['reminders']['Row'] & {
 }
 type FilterType = 'all' | 'high-priority' | 'today' | 'this-week' | 'overdue' | 'completed' | 'recurring'
 type ViewMode = 'card' | 'list' | 'compact'
-type RepeatFrequency = 'none' | 'daily' | 'weekly' | 'monthly'
 
 // Type for real-time subscription payload
 type RealtimePayload = {
@@ -179,7 +179,7 @@ type UpdateReminderInput = {
   title?: string;
   description?: string;
   reminder_time?: string;
-  repeat_frequency?: RepeatFrequency;
+  repeat_frequency?: "none" | "daily" | "weekly" | "monthly";
   priority?: Priority;
   space_id?: string;
   location?: string;
@@ -360,10 +360,13 @@ export default function Reminders() {
         r.id === reminderId ? { ...r, ...updates } : r
       ))
       
-      const updateData: UpdateReminderInput = {
+      const updateData = {
         ...updates,
-        description: updates.description || undefined
-      }
+        description: updates.description || undefined,
+        repeat_frequency: updates.repeat_frequency as RepeatFrequency | undefined,
+        priority: updates.priority as Priority | undefined,
+        space_id: updates.space_id || undefined
+      } satisfies UpdateReminderInput
       
       await updateReminder(reminderId, updateData)
       toast.success('Reminder updated successfully')
@@ -1263,7 +1266,14 @@ export default function Reminders() {
         </AnimatePresence>
 
         {/* Tabs Navigation */}
-        <Tabs value={activeTab} onValueChange={(value: typeof activeTab) => setActiveTab(value)}>
+        <Tabs 
+          value={activeTab} 
+          onValueChange={(value: string) => {
+            if (value === "all" || value === "upcoming" || value === "overdue" || value === "completed") {
+              setActiveTab(value as typeof activeTab)
+            }
+          }}
+        >
           <TabsList className="grid w-full grid-cols-4 h-12 bg-muted/50">
             <TabsTrigger value="all" className="font-semibold">All Reminders</TabsTrigger>
             <TabsTrigger value="upcoming" className="font-semibold">
