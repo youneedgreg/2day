@@ -615,14 +615,14 @@ export default function Notes() {
     } finally {
       setLoading(false)
     }
-  }, [user])
+  }, [user, fetchNotes, fetchUserTags])
 
   const handleRealTimeUpdate = useCallback((payload: RealtimePayload) => {
     if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE' || payload.eventType === 'DELETE') {
       fetchNotes()
       fetchUserTags()
     }
-  }, [])
+  }, [fetchNotes, fetchUserTags])
 
   const fetchNotes = useCallback(async () => {
     if (!user) return
@@ -715,7 +715,7 @@ export default function Notes() {
       console.error('Error filtering notes:', error);
       toast.error('Failed to filter notes');
     }
-  }, [notes, searchQuery, selectedTag, selectedColor, selectedType, showArchived, activeTab, user]);
+  }, [notes, searchQuery, selectedTag, selectedColor, selectedType, showArchived, activeTab, user, debouncedSearchQuery]);
 
   useEffect(() => {
     if (!user) return
