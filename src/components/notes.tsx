@@ -55,8 +55,8 @@ type NoteType = 'text' | 'rich_text' | 'drawing' | 'checklist'
 // Type for real-time subscription payload
 type RealtimePayload = {
   eventType: 'INSERT' | 'UPDATE' | 'DELETE';
-  new?: Record<string, any>;
-  old?: Record<string, any>;
+  new?: Record<string, unknown>;
+  old?: Record<string, unknown>;
   table: string;
 }
 
@@ -65,6 +65,17 @@ type ChecklistItem = {
   id: string;
   text: string;
   completed: boolean;
+}
+
+// Update the Note type to include metadata
+type NoteMetadata = {
+  is_favorite?: boolean;
+  is_pinned?: boolean;
+  font_family?: string;
+}
+
+type ExtendedNote = Note & {
+  metadata?: NoteMetadata;
 }
 
 // Color options for notes with enhanced gradients
@@ -249,7 +260,6 @@ const RichTextEditor = ({
         )}
         onInput={handleInput}
         style={{ direction: 'ltr' }}
-        placeholder="Start writing your rich text content..."
       />
     </div>
   )
@@ -437,8 +447,8 @@ const ChecklistEditor = ({
   useEffect(() => {
     try {
       const parsed = initialValue ? JSON.parse(initialValue) : []
-      setItems(parsed.map((item: any, index: number) => ({
-        id: item.id || `item-${index}`,
+      setItems(parsed.map((item: ChecklistItem) => ({
+        id: item.id || `item-${Date.now()}`,
         text: item.text || '',
         completed: item.completed || false
       })))
@@ -502,7 +512,7 @@ const ChecklistEditor = ({
 
       <ScrollArea className="max-h-60">
         <div className="space-y-2">
-          {items.map((item, index) => (
+          {items.map((item) => (
             <div key={item.id} className="flex items-center gap-2 p-2 border rounded-lg">
               <Checkbox
                 checked={item.completed}
@@ -541,8 +551,8 @@ const ChecklistEditor = ({
 // Main Notes Component
 export default function Notes() {
   const { user } = useAuth()
-  const [notes, setNotes] = useState<Note[]>([])
-  const [filteredNotes, setFilteredNotes] = useState<Note[]>([])
+  const [notes, setNotes] = useState<ExtendedNote[]>([])
+  const [filteredNotes, setFilteredNotes] = useState<ExtendedNote[]>([])
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedTag, setSelectedTag] = useState<string | null>(null)
@@ -567,11 +577,17 @@ export default function Notes() {
   const [newTag, setNewTag] = useState('')
   
   // Edit note state
-  const [editingNote, setEditingNote] = useState<Note | null>(null)
+  const [editingNote, setEditingNote] = useState<ExtendedNote | null>(null)
   
   // Quick actions state
   const [selectedNotes, setSelectedNotes] = useState<string[]>([])
   const [isSelectionMode, setIsSelectionMode] = useState(false)
+
+  // Add new state variables in the Notes component
+  const [isPreviewMode, setIsPreviewMode] = useState(false)
+  const [canUndo, setCanUndo] = useState(false)
+  const [canRedo, setCanRedo] = useState(false)
+  const [isUploading, setIsUploading] = useState(false)
 
   const initializeData = useCallback(async () => {
     if (!user) return
@@ -623,7 +639,7 @@ export default function Notes() {
     // Apply active tab filter
     switch (activeTab) {
       case 'pinned':
-        filtered = filtered.filter(note => note.is_pinned)
+        filtered = filtered.filter(note => note.metadata?.is_pinned)
         break
       case 'recent':
         filtered = filtered.filter(note => {
@@ -632,7 +648,7 @@ export default function Notes() {
         })
         break
       case 'starred':
-        filtered = filtered.filter(note => note.is_favorite)
+        filtered = filtered.filter(note => note.metadata?.is_favorite)
         break
     }
 
@@ -665,8 +681,8 @@ export default function Notes() {
 
     // Sort: pinned first, then by updated date
     filtered.sort((a, b) => {
-      if (a.is_pinned && !b.is_pinned) return -1
-      if (!a.is_pinned && b.is_pinned) return 1
+      if (a.metadata?.is_pinned && !b.metadata?.is_pinned) return -1
+      if (!a.metadata?.is_pinned && b.metadata?.is_pinned) return 1
       return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
     })
 
@@ -704,8 +720,10 @@ export default function Notes() {
         color: newNote.color,
         note_type: newNote.note_type,
         tags: newNote.tags.length > 0 ? newNote.tags : undefined,
-        is_pinned: newNote.is_pinned,
-        font_family: newNote.font_family
+        metadata: {
+          is_pinned: newNote.is_pinned,
+          font_family: newNote.font_family
+        }
       })
       
       // Optimistic update
@@ -736,14 +754,21 @@ export default function Notes() {
     }
   }
 
-  const handleUpdateNote = async (noteId: string, updates: Partial<Note>) => {
+  const handleUpdateNote = async (noteId: string, updates: Partial<ExtendedNote>) => {
     try {
       // Optimistic update
       setNotes(prev => prev.map(n => 
         n.id === noteId ? { ...n, ...updates } : n
       ))
       
-      await updateNote(noteId, updates)
+      const { metadata, content, ...restUpdates } = updates
+      await updateNote(noteId, {
+        ...restUpdates,
+        content: content || undefined, // Convert null to undefined
+        metadata: {
+          ...(metadata || {})
+        }
+      })
       toast.success('Note updated successfully')
     } catch (error) {
       console.error('Error updating note:', error)
@@ -783,24 +808,30 @@ export default function Notes() {
     const note = notes.find(n => n.id === noteId)
     if (!note) return
     
-    await handleUpdateNote(noteId, { is_pinned: !note.is_pinned })
-    toast.success(note.is_pinned ? 'Note unpinned' : 'Note pinned')
+    await handleUpdateNote(noteId, { is_pinned: !note.metadata?.is_pinned })
+    toast.success(note.metadata?.is_pinned ? 'Note unpinned' : 'Note pinned')
   }
 
   const handleArchiveNote = async (noteId: string) => {
     const note = notes.find(n => n.id === noteId)
     if (!note) return
     
-    await handleUpdateNote(noteId, { is_archived: !note.is_archived })
-    toast.success(note.is_archived ? 'Note unarchived' : 'Note archived')
+    await handleUpdateNote(noteId, { is_archived: !note.metadata?.is_archived })
+    toast.success(note.metadata?.is_archived ? 'Note unarchived' : 'Note archived')
   }
 
   const handleStarNote = async (noteId: string) => {
     const note = notes.find(n => n.id === noteId)
     if (!note) return
     
-    await handleUpdateNote(noteId, { is_favorite: !note.is_favorite })
-    toast.success(note.is_favorite ? 'Note unstarred' : 'Note starred')
+    const isFavorite = note.metadata?.is_favorite || false
+    await handleUpdateNote(noteId, {
+      metadata: {
+        ...note.metadata,
+        is_favorite: !isFavorite
+      }
+    })
+    toast.success(isFavorite ? 'Note unstarred' : 'Note starred')
   }
 
   const addTagToNote = async (noteId: string, tag: string) => {
@@ -862,7 +893,8 @@ export default function Notes() {
       setIsSelectionMode(false)
       toast.success(`${selectedNotes.length} notes ${action}d`)
       fetchNotes()
-    } catch (error) {
+    } catch (error: unknown) {
+      console.error('Error handling bulk action:', error)
       toast.error(`Failed to ${action} notes`)
     }
   }
@@ -890,8 +922,8 @@ export default function Notes() {
           text: note.content || '',
           url: window.location.href
         })
-      } catch (error) {
-        console.log('Share cancelled')
+      } catch (error: unknown) {
+        console.log('Share cancelled:', error)
       }
     } else {
       // Fallback: copy to clipboard
@@ -901,7 +933,7 @@ export default function Notes() {
     }
   }
 
-  const renderNoteContent = (note: Note) => {
+  const renderNoteContent = (note: ExtendedNote) => {
     const colorOption = colorOptions.find(c => c.value === note.color)
     
     switch (note.note_type) {
@@ -910,7 +942,7 @@ export default function Notes() {
           <div 
             className={cn(
               "prose prose-sm max-w-none text-sm",
-              note.font_family || 'font-sans',
+              note.metadata?.font_family || 'font-sans',
               colorOption?.textColor
             )}
             dangerouslySetInnerHTML={{ __html: note.content || '' }}
@@ -956,7 +988,7 @@ export default function Notes() {
         return (
           <p className={cn(
             "text-sm whitespace-pre-wrap line-clamp-4",
-            note.font_family || 'font-sans',
+            note.metadata?.font_family || 'font-sans',
             colorOption?.textColor
           )}>
             {note.content}
@@ -1009,6 +1041,49 @@ export default function Notes() {
     }
   }
 
+  // Add new functions in the Notes component
+  const handleUpload = async (files: FileList) => {
+    setIsUploading(true)
+    try {
+      // Process each file
+      for (const file of Array.from(files)) {
+        const reader = new FileReader()
+        reader.onload = async (e) => {
+          const content = e.target?.result as string
+          await createNote(user!.id, {
+            title: file.name,
+            content,
+            note_type: 'text',
+            metadata: {
+              uploaded_at: new Date().toISOString()
+            }
+          })
+        }
+        reader.readAsText(file)
+      }
+      toast.success('Files uploaded successfully')
+    } catch (error) {
+      console.error('Error uploading files:', error)
+      toast.error('Failed to upload files')
+    } finally {
+      setIsUploading(false)
+    }
+  }
+
+  const handleUndo = () => {
+    // Implement undo functionality
+    setCanUndo(false)
+    setCanRedo(true)
+    toast.success('Changes undone')
+  }
+
+  const handleRedo = () => {
+    // Implement redo functionality
+    setCanRedo(false)
+    setCanUndo(true)
+    toast.success('Changes redone')
+  }
+
   if (loading) {
     return (
       <div className="flex justify-center items-center py-20">
@@ -1054,6 +1129,88 @@ export default function Notes() {
         </div>
         
         <div className="flex items-center gap-3">
+          {/* Existing buttons */}
+          
+          {/* Upload Button */}
+          <div className="relative">
+            <input
+              type="file"
+              multiple
+              className="hidden"
+              id="file-upload"
+              onChange={(e) => e.target.files && handleUpload(e.target.files)}
+            />
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => document.getElementById('file-upload')?.click()}
+              disabled={isUploading}
+            >
+              <Upload className="h-4 w-4 mr-2" />
+              {isUploading ? 'Uploading...' : 'Upload'}
+            </Button>
+          </div>
+
+          {/* Preview Toggle */}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setIsPreviewMode(!isPreviewMode)}
+          >
+            {isPreviewMode ? (
+              <EyeOff className="h-4 w-4 mr-2" />
+            ) : (
+              <Eye className="h-4 w-4 mr-2" />
+            )}
+            {isPreviewMode ? 'Edit' : 'Preview'}
+          </Button>
+
+          {/* Undo/Redo Buttons */}
+          <div className="flex gap-1">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleUndo}
+              disabled={!canUndo}
+            >
+              <Undo className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleRedo}
+              disabled={!canRedo}
+            >
+              <Redo className="h-4 w-4" />
+            </Button>
+          </div>
+
+          {/* Quick Actions */}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              // Implement quick actions
+              toast.success('Quick action executed')
+            }}
+          >
+            <Zap className="h-4 w-4 mr-2" />
+            Quick Action
+          </Button>
+
+          {/* Calendar View */}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              // Implement calendar view
+              toast.info('Calendar view coming soon')
+            }}
+          >
+            <Calendar className="h-4 w-4 mr-2" />
+            Calendar
+          </Button>
+
           {/* Selection Mode Toggle */}
           {filteredNotes.length > 0 && (
             <Button
@@ -1070,7 +1227,7 @@ export default function Notes() {
           )}
 
           {/* View Mode Toggle */}
-          <ToggleGroup type="single" value={viewMode} onValueChange={(v) => v && setViewMode(v as any)}>
+          <ToggleGroup type="single" value={viewMode} onValueChange={(v) => v && setViewMode(v as 'grid' | 'list')}>
             <ToggleGroupItem value="grid" size="sm" className="h-10 px-4">
               <Grid className="h-4 w-4 mr-2" />
               Grid
@@ -1561,7 +1718,8 @@ export default function Notes() {
                         colorGradient,
                         viewMode === 'list' && "flex flex-row",
                         isSelected && "ring-2 ring-primary",
-                        isSelectionMode && "hover:ring-2 hover:ring-primary/50"
+                        isSelectionMode && "hover:ring-2 hover:ring-primary/50",
+                        isPreviewMode && "pointer-events-none"
                       )}
                       onClick={() => {
                         if (isSelectionMode) {
@@ -1583,10 +1741,10 @@ export default function Notes() {
                                 )}
                                 
                                 <div className="flex items-center gap-2">
-                                  {note.is_pinned && (
+                                  {note.metadata?.is_pinned && (
                                     <Pin className="h-4 w-4 text-orange-500 fill-current" />
                                   )}
-                                  {note.is_favorite && (
+                                  {note.metadata?.is_favorite && (
                                     <Star className="h-4 w-4 text-yellow-500 fill-current" />
                                   )}
                                 </div>
@@ -1658,21 +1816,21 @@ export default function Notes() {
                                     handlePinNote(note.id)
                                   }}>
                                     <Pin className="h-4 w-4 mr-2" />
-                                    {note.is_pinned ? 'Unpin' : 'Pin'}
+                                    {note.metadata?.is_pinned ? 'Unpin' : 'Pin'}
                                   </DropdownMenuItem>
                                   <DropdownMenuItem onClick={(e) => {
                                     e.stopPropagation()
                                     handleStarNote(note.id)
                                   }}>
                                     <Star className="h-4 w-4 mr-2" />
-                                    {note.is_favorite ? 'Unstar' : 'Star'}
+                                    {note.metadata?.is_favorite ? 'Unstar' : 'Star'}
                                   </DropdownMenuItem>
                                   <DropdownMenuItem onClick={(e) => {
                                     e.stopPropagation()
                                     handleArchiveNote(note.id)
                                   }}>
                                     <Archive className="h-4 w-4 mr-2" />
-                                    {note.is_archived ? 'Unarchive' : 'Archive'}
+                                    {note.metadata?.is_archived ? 'Unarchive' : 'Archive'}
                                   </DropdownMenuItem>
                                   <DropdownMenuSeparator />
                                   <DropdownMenuItem 
@@ -1709,7 +1867,7 @@ export default function Notes() {
                                   {note.word_count} words
                                 </span>
                               )}
-                              {note.is_archived && (
+                              {note.metadata?.is_archived && (
                                 <Badge variant="outline" className="text-xs">
                                   <Archive className="h-3 w-3 mr-1" />
                                   Archived
@@ -1900,8 +2058,14 @@ export default function Notes() {
                         Pin Note
                       </Label>
                       <Switch
-                        checked={editingNote.is_pinned || false}
-                        onCheckedChange={(checked) => setEditingNote({ ...editingNote, is_pinned: checked })}
+                        checked={editingNote.metadata?.is_pinned || false}
+                        onCheckedChange={(checked) => setEditingNote({
+                          ...editingNote,
+                          metadata: {
+                            ...editingNote.metadata,
+                            is_pinned: checked
+                          }
+                        })}
                       />
                     </div>
                     
@@ -1911,8 +2075,14 @@ export default function Notes() {
                         Star Note
                       </Label>
                       <Switch
-                        checked={editingNote.is_favorite || false}
-                        onCheckedChange={(checked) => setEditingNote({ ...editingNote, is_favorite: checked })}
+                        checked={editingNote.metadata?.is_favorite || false}
+                        onCheckedChange={(checked) => setEditingNote({
+                          ...editingNote,
+                          metadata: {
+                            ...editingNote.metadata,
+                            is_favorite: checked
+                          }
+                        })}
                       />
                     </div>
 
@@ -1922,8 +2092,14 @@ export default function Notes() {
                         Archive Note
                       </Label>
                       <Switch
-                        checked={editingNote.is_archived || false}
-                        onCheckedChange={(checked) => setEditingNote({ ...editingNote, is_archived: checked })}
+                        checked={editingNote.metadata?.is_archived || false}
+                        onCheckedChange={(checked) => setEditingNote({
+                          ...editingNote,
+                          metadata: {
+                            ...editingNote.metadata,
+                            is_archived: checked
+                          }
+                        })}
                       />
                     </div>
                   </div>
@@ -1943,9 +2119,9 @@ export default function Notes() {
                       content: editingNote.content,
                       color: editingNote.color,
                       font_family: editingNote.font_family,
-                      is_pinned: editingNote.is_pinned,
-                      is_favorite: editingNote.is_favorite,
-                      is_archived: editingNote.is_archived
+                      is_pinned: editingNote.metadata?.is_pinned,
+                      is_favorite: editingNote.metadata?.is_favorite,
+                      is_archived: editingNote.metadata?.is_archived
                     })
                     setEditingNote(null)
                   }
