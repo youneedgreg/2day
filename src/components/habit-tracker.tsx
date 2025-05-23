@@ -26,14 +26,6 @@ import { toast } from 'sonner'
 // Define types
 type HabitType = "builder" | "quitter"
 
-// Type for real-time subscription payload
-type RealtimePayload = {
-  eventType: 'INSERT' | 'UPDATE' | 'DELETE';
-  new?: unknown;
-  old?: unknown;
-  table: string;
-}
-
 const DAYS_OF_WEEK = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 
 // Helper functions
@@ -81,12 +73,9 @@ export default function HabitTracker() {
   }, [user])
 
   // Handle real-time updates
-  const handleRealTimeUpdate = useCallback((payload: RealtimePayload) => {
-    if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE' || payload.eventType === 'DELETE') {
-      // Refetch habits to get updated data with relations
-      fetchHabits()
-    }
-  }, [fetchHabits])
+  const handleRealTimeUpdate = (habits: HabitWithCompletions[]) => {
+    setHabits(habits)
+  }
 
   useEffect(() => {
     if (!user) return
@@ -94,13 +83,15 @@ export default function HabitTracker() {
     fetchHabits()
 
     // Subscribe to real-time updates
-    const subscription = subscribeToHabitChanges(user.id, (payload) => {
-      console.log('Real-time habit update:', payload)
-      handleRealTimeUpdate(payload)
+    const subscription = subscribeToHabitChanges(user.id, (habits: HabitWithCompletions[]) => {
+      console.log('Real-time habit update:', habits)
+      setHabits(habits)
     })
 
     return () => {
-      subscription.unsubscribe()
+      if (subscription) {
+        subscription()
+      }
     }
   }, [user, fetchHabits, handleRealTimeUpdate])
 
@@ -512,13 +503,6 @@ export default function HabitTracker() {
                                   <Badge variant="outline" className="text-xs">Daily</Badge>
                                 )}
                               </div>
-                              
-                              {habit.streak_count > 0 && (
-                                <Badge className="flex items-center gap-1 bg-gradient-to-r from-orange-500 to-red-500 text-white">
-                                  <Flame className="h-3 w-3" />
-                                  {habit.streak_count}
-                                </Badge>
-                              )}
                               
                               {completionRate === 100 && (
                                 <Badge className="flex items-center gap-1 bg-gradient-to-r from-purple-500 to-pink-500 text-white">
