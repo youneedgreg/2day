@@ -171,7 +171,21 @@ export default function Calendar() {
       ])
       
       // Process and generate calendar days with this data
-      generateCalendarDays(habitsData, todosData, remindersData)
+      generateCalendarDays(
+        habitsData,
+        todosData,
+        remindersData.map(reminder => ({
+          ...reminder,
+          reminder_time: reminder.due_date,
+          repeat_frequency: null,
+          status: reminder.completed ? 'completed' as const : 'pending' as const,
+          priority: null,
+          completed_at: reminder.completed ? reminder.updated_at : null,
+          updated_at: reminder.updated_at || reminder.created_at,
+          is_recurring: false,
+          reminder_metadata: null
+        }))
+      )
     } catch (error) {
       console.error('Error loading calendar data:', error)
       toast.error('Failed to load calendar data')
