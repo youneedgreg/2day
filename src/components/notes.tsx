@@ -49,8 +49,17 @@ import { toast } from 'sonner'
 // Initialize dayjs plugins
 dayjs.extend(relativeTime)
 
+type NoteMetadata = {
+  is_favorite?: boolean;
+  is_pinned?: boolean;
+  is_archived?: boolean;
+  font_family?: string;
+}
+
 type Note = Database['public']['Tables']['notes']['Row']
-type NoteType = 'text' | 'rich_text' | 'drawing' | 'checklist'
+type ExtendedNote = Note & {
+  metadata?: NoteMetadata;
+}
 
 // Type for real-time subscription payload
 type RealtimePayload = {
@@ -65,17 +74,6 @@ type ChecklistItem = {
   id: string;
   text: string;
   completed: boolean;
-}
-
-// Update the Note type to include metadata
-type NoteMetadata = {
-  is_favorite?: boolean;
-  is_pinned?: boolean;
-  font_family?: string;
-}
-
-type ExtendedNote = Note & {
-  metadata?: NoteMetadata;
 }
 
 // Color options for notes with enhanced gradients
@@ -548,11 +546,13 @@ const ChecklistEditor = ({
   )
 }
 
+// Add NoteType definition
+type NoteType = 'text' | 'rich_text' | 'drawing' | 'checklist'
+
 // Main Notes Component
 export default function Notes() {
   const { user } = useAuth()
   const [notes, setNotes] = useState<ExtendedNote[]>([])
-  const [filteredNotes, setFilteredNotes] = useState<ExtendedNote[]>([])
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedTag, setSelectedTag] = useState<string | null>(null)
@@ -587,25 +587,28 @@ export default function Notes() {
   const [isPreviewMode, setIsPreviewMode] = useState(false)
   const [canUndo, setCanUndo] = useState(false)
   const [canRedo, setCanRedo] = useState(false)
-  const [isUploading, setIsUploading] = useState(false)
-
-  // Add this near the top of the component, after the state declarations
-  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
-
-  // Add this useEffect for debouncing
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setDebouncedSearchQuery(searchQuery);
-    }, 300); // 300ms delay
-
-    return () => clearTimeout(timer);
-  }, [searchQuery]);
 
   const fetchNotes = useCallback(async () => {
     if (!user) return
     try {
-      const notes = await getNotes(user.id)
-      setNotes(notes)
+      const fetchedNotes = await getNotes(user.id)
+      setNotes(fetchedNotes.map(note => ({
+        ...note,
+        updated_at: note.updated_at ?? note.created_at ?? '',
+        color: note.color ?? '#ffffff',
+        tags: note.tags ?? [],
+        note_type: note.note_type ?? 'text',
+        is_pinned: note.is_pinned ?? false,
+        is_archived: note.is_archived ?? false,
+        word_count: note.word_count ?? 0,
+        character_count: note.character_count ?? 0,
+        metadata: {
+          is_favorite: note.metadata?.is_favorite ?? false,
+          is_pinned: note.is_pinned ?? false,
+          is_archived: note.is_archived ?? false,
+          font_family: note.metadata?.font_family ?? 'font-sans',
+        }
+      })))
     } catch (error) {
       console.error('Error fetching notes:', error)
     }
@@ -647,11 +650,45 @@ export default function Notes() {
   const filterNotes = useCallback(async (type: 'tag' | 'search', value: string) => {
     if (!user) return
     try {
-      let filteredNotes: Note[] = []
+      let filteredNotes: ExtendedNote[] = []
       if (type === 'tag') {
-        filteredNotes = await getNotesByTag(value, user.id)
+        const notes = await getNotesByTag(value, user.id)
+        filteredNotes = notes.map(note => ({
+          ...note,
+          updated_at: note.updated_at ?? note.created_at ?? '',
+          color: note.color ?? '#ffffff',
+          tags: note.tags ?? [],
+          note_type: note.note_type ?? 'text',
+          is_pinned: note.is_pinned ?? false,
+          is_archived: note.is_archived ?? false,
+          word_count: note.word_count ?? 0,
+          character_count: note.character_count ?? 0,
+          metadata: {
+            is_favorite: note.metadata?.is_favorite ?? false,
+            is_pinned: note.is_pinned ?? false,
+            is_archived: note.is_archived ?? false,
+            font_family: note.metadata?.font_family ?? 'font-sans',
+          }
+        }))
       } else {
-        filteredNotes = await searchNotes(value, user.id)
+        const notes = await searchNotes(value, user.id)
+        filteredNotes = notes.map(note => ({
+          ...note,
+          updated_at: note.updated_at ?? note.created_at ?? '',
+          color: note.color ?? '#ffffff',
+          tags: note.tags ?? [],
+          note_type: note.note_type ?? 'text',
+          is_pinned: note.is_pinned ?? false,
+          is_archived: note.is_archived ?? false,
+          word_count: note.word_count ?? 0,
+          character_count: note.character_count ?? 0,
+          metadata: {
+            is_favorite: note.metadata?.is_favorite ?? false,
+            is_pinned: note.is_pinned ?? false,
+            is_archived: note.is_archived ?? false,
+            font_family: note.metadata?.font_family ?? 'font-sans',
+          }
+        }))
       }
       setNotes(filteredNotes)
     } catch (error) {
@@ -665,13 +702,13 @@ export default function Notes() {
     initializeData()
 
     // Subscribe to real-time updates
-    const subscription = subscribeToNotesChanges(user.id, (payload) => {
+    const unsubscribe = subscribeToNotesChanges(user.id, (payload) => {
       console.log('Real-time note update:', payload)
       handleRealTimeUpdate(payload)
     })
 
     return () => {
-      subscription.unsubscribe()
+      if (typeof unsubscribe === 'function') unsubscribe()
     }
   }, [user, initializeData, handleRealTimeUpdate])
 
@@ -690,13 +727,37 @@ export default function Notes() {
         color: '#ffffff',
         tags: [],
         note_type: 'text',
-        metadata: {},
-        is_archived: false,
+        metadata: {
+          is_favorite: false,
+          is_pinned: false,
+          is_archived: false,
+          font_family: 'font-sans'
+        },
         is_pinned: false,
+        is_archived: false,
         word_count: 0,
         character_count: 0
-      })
-      setNotes(prev => [newNote, ...prev])
+      } as Omit<Note, 'id' | 'created_at' | 'updated_at'>)
+      setNotes(prev => [
+        {
+          ...newNote,
+          updated_at: newNote.updated_at ?? newNote.created_at ?? '',
+          color: newNote.color ?? '#ffffff',
+          tags: newNote.tags ?? [],
+          note_type: newNote.note_type ?? 'text',
+          is_pinned: newNote.is_pinned ?? false,
+          is_archived: newNote.is_archived ?? false,
+          word_count: newNote.word_count ?? 0,
+          character_count: newNote.character_count ?? 0,
+          metadata: {
+            is_favorite: newNote.metadata?.is_favorite ?? false,
+            is_pinned: newNote.is_pinned ?? false,
+            is_archived: newNote.is_archived ?? false,
+            font_family: newNote.metadata?.font_family ?? 'font-sans',
+          }
+        },
+        ...prev
+      ])
     } catch (error) {
       console.error('Error creating note:', error)
     }
@@ -747,7 +808,26 @@ export default function Notes() {
   const handleDuplicateNote = async (noteId: string) => {
     try {
       const duplicatedNote = await duplicateNote(noteId)
-      setNotes(prev => [duplicatedNote, ...prev])
+      setNotes(prev => [
+        {
+          ...duplicatedNote,
+          updated_at: duplicatedNote.updated_at ?? duplicatedNote.created_at ?? '',
+          color: duplicatedNote.color ?? '#ffffff',
+          tags: duplicatedNote.tags ?? [],
+          note_type: duplicatedNote.note_type ?? 'text',
+          is_pinned: duplicatedNote.is_pinned ?? false,
+          is_archived: duplicatedNote.is_archived ?? false,
+          word_count: duplicatedNote.word_count ?? 0,
+          character_count: duplicatedNote.character_count ?? 0,
+          metadata: {
+            is_favorite: duplicatedNote.metadata?.is_favorite ?? false,
+            is_pinned: duplicatedNote.is_pinned ?? false,
+            is_archived: duplicatedNote.is_archived ?? false,
+            font_family: duplicatedNote.metadata?.font_family ?? 'font-sans',
+          }
+        },
+        ...prev
+      ])
     } catch (error) {
       console.error('Error duplicating note:', error)
     }
@@ -849,7 +929,7 @@ export default function Notes() {
   }
 
   const exportNotes = () => {
-    const dataStr = JSON.stringify(filteredNotes, null, 2)
+    const dataStr = JSON.stringify(notes, null, 2)
     const dataBlob = new Blob([dataStr], { type: 'application/json' })
     const url = URL.createObjectURL(dataBlob)
     const link = document.createElement('a')
@@ -1002,13 +1082,37 @@ export default function Notes() {
         color: '#ffffff',
         tags: [],
         note_type: 'text',
-        metadata: {},
-        is_archived: false,
+        metadata: {
+          is_favorite: false,
+          is_pinned: false,
+          is_archived: false,
+          font_family: 'font-sans'
+        },
         is_pinned: false,
+        is_archived: false,
         word_count: content.split(/\s+/).length,
         character_count: content.length
-      })
-      setNotes(prev => [newNote, ...prev])
+      } as Omit<Note, 'id' | 'created_at' | 'updated_at'>)
+      setNotes(prev => [
+        {
+          ...newNote,
+          updated_at: newNote.updated_at ?? newNote.created_at ?? '',
+          color: newNote.color ?? '#ffffff',
+          tags: newNote.tags ?? [],
+          note_type: newNote.note_type ?? 'text',
+          is_pinned: newNote.is_pinned ?? false,
+          is_archived: newNote.is_archived ?? false,
+          word_count: newNote.word_count ?? 0,
+          character_count: newNote.character_count ?? 0,
+          metadata: {
+            is_favorite: newNote.metadata?.is_favorite ?? false,
+            is_pinned: newNote.is_pinned ?? false,
+            is_archived: newNote.is_archived ?? false,
+            font_family: newNote.metadata?.font_family ?? 'font-sans',
+          }
+        },
+        ...prev
+      ])
     } catch (error) {
       console.error('Error uploading file:', error)
     }
