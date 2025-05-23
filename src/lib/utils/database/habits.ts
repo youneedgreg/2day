@@ -167,60 +167,6 @@ export async function isHabitCompletedOnDate(habitId: string, date: string): Pro
   }
 }
 
-// Update habit streak count based on completions
-async function updateHabitStreak(habitId: string): Promise<void> {
-  const supabase = createClient()
-  
-  try {
-    // Get all completions for this habit, ordered by date
-    const { data: completions, error: completionsError } = await supabase
-      .from('habit_completions')
-      .select('completed_at')
-      .eq('habit_id', habitId)
-      .order('completed_at', { ascending: false })
-
-    if (completionsError) throw completionsError
-
-    // Calculate current streak
-    let streak = 0
-    const today = new Date()
-    
-    if (completions && completions.length > 0) {
-      // Convert completions to dates and remove duplicates
-      const completionDates = Array.from(new Set(
-        completions.map(c => c.completed_at.split('T')[0])
-      )).sort((a, b) => new Date(b).getTime() - new Date(a).getTime())
-
-      // Check for consecutive days starting from today
-      for (let i = 0; i < completionDates.length; i++) {
-        const completionDate = new Date(completionDates[i])
-        const expectedDate = new Date(today)
-        expectedDate.setDate(today.getDate() - i)
-        
-        const completionDateStr = completionDate.toISOString().split('T')[0]
-        const expectedDateStr = expectedDate.toISOString().split('T')[0]
-        
-        if (completionDateStr === expectedDateStr) {
-          streak++
-        } else {
-          break
-        }
-      }
-    }
-
-    // Update the habit with new streak count
-    const { error: updateError } = await supabase
-      .from('habits')
-      .update({ streak_count: streak })
-      .eq('id', habitId)
-
-    if (updateError) throw updateError
-  } catch (error) {
-    console.error('Error updating habit streak:', error)
-    throw error
-  }
-}
-
 // Delete a habit
 export async function deleteHabit(id: string) {
   const supabase = createClient()
@@ -239,14 +185,6 @@ export async function deleteHabit(id: string) {
     .eq('id', id)
   
   if (error) throw error
-}
-
-// Define types for real-time change payloads
-interface RealtimeChangePayload {
-  eventType: 'INSERT' | 'UPDATE' | 'DELETE'
-  new: Record<string, unknown> | null
-  old: Record<string, unknown> | null
-  table: 'habits' | 'habit_completions'
 }
 
 // Subscribe to real-time changes for habits
