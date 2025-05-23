@@ -24,18 +24,94 @@ export interface UpdateReminderInput {
   space_id?: string
 }
 
-// Get all reminders for a user
-export async function getReminders(userId: string) {
+// FIXED: Get all reminders for a user (removed due_date ordering)
+export async function getReminders(userId: string): Promise<Reminder[]> {
   const supabase = createClient()
   
   const { data: reminders, error } = await supabase
     .from('reminders')
     .select('*')
     .eq('user_id', userId)
-    .order('due_date', { ascending: true })
+    .order('reminder_time', { ascending: true }) // Use reminder_time instead of due_date
   
   if (error) throw error
-  return reminders
+  return reminders || []
+}
+
+// ADDED: Subscribe to real-time reminder changes (MISSING FUNCTION)
+export function subscribeToReminderChanges(userId: string, callback: (reminders: Reminder[]) => void) {
+  const supabase = createClient()
+  
+  const channel = supabase
+    .channel('reminders-changes')
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'reminders',
+        filter: `user_id=eq.${userId}`
+      },
+      async () => {
+        // Reload reminders when changes occur
+        try {
+          const reminders = await getReminders(userId)
+          callback(reminders)
+        } catch (error) {
+          console.error('Error reloading reminders:', error)
+        }
+      }
+    )
+    .subscribe()
+
+  // Return unsubscribe function
+  return () => {
+    supabase.removeChannel(channel)
+  }
+}
+
+// ADDED: Complete a reminder (MISSING FUNCTION)
+export async function completeReminder(reminderId: string) {
+  const supabase = createClient()
+  
+  const { data, error } = await supabase
+    .from('reminders')
+    .update({ 
+      status: 'completed',
+      updated_at: new Date().toISOString()
+    })
+    .eq('id', reminderId)
+    .select()
+    .single()
+
+  if (error) {
+    console.error('Error completing reminder:', error)
+    throw error
+  }
+
+  return data
+}
+
+// ADDED: Dismiss a reminder (MISSING FUNCTION)
+export async function dismissReminder(reminderId: string) {
+  const supabase = createClient()
+  
+  const { data, error } = await supabase
+    .from('reminders')
+    .update({ 
+      status: 'dismissed',
+      updated_at: new Date().toISOString()
+    })
+    .eq('id', reminderId)
+    .select()
+    .single()
+
+  if (error) {
+    console.error('Error dismissing reminder:', error)
+    throw error
+  }
+
+  return data
 }
 
 // Create a new reminder
@@ -87,13 +163,13 @@ export async function getRemindersBySpace(spaceId: string) {
     .from('reminders')
     .select('*')
     .eq('space_id', spaceId)
-    .order('due_date', { ascending: true })
+    .order('reminder_time', { ascending: true }) // Fixed: use reminder_time instead of due_date
   
   if (error) throw error
-  return reminders
+  return reminders || []
 }
 
-// Get upcoming reminders (next 7 days)
+// FIXED: Get upcoming reminders (next 7 days) - using reminder_time and status
 export async function getUpcomingReminders(userId: string) {
   const supabase = createClient()
   
@@ -101,15 +177,15 @@ export async function getUpcomingReminders(userId: string) {
     .from('reminders')
     .select('*')
     .eq('user_id', userId)
-    .eq('completed', false)
-    .gte('due_date', new Date().toISOString())
-    .order('due_date', { ascending: true })
+    .eq('status', 'pending') // Use status instead of completed
+    .gte('reminder_time', new Date().toISOString()) // Use reminder_time instead of due_date
+    .order('reminder_time', { ascending: true })
   
   if (error) throw error
-  return reminders
+  return reminders || []
 }
 
-// Get overdue reminders
+// FIXED: Get overdue reminders - using reminder_time and status
 export async function getOverdueReminders(userId: string) {
   const supabase = createClient()
   
@@ -117,12 +193,12 @@ export async function getOverdueReminders(userId: string) {
     .from('reminders')
     .select('*')
     .eq('user_id', userId)
-    .eq('completed', false)
-    .lt('due_date', new Date().toISOString())
-    .order('due_date', { ascending: true })
+    .eq('status', 'pending') // Use status instead of completed
+    .lt('reminder_time', new Date().toISOString()) // Use reminder_time instead of due_date
+    .order('reminder_time', { ascending: true })
   
   if (error) throw error
-  return reminders
+  return reminders || []
 }
 
 // Search reminders
