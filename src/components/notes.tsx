@@ -601,6 +601,26 @@ export default function Notes() {
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
+  const fetchNotes = useCallback(async () => {
+    if (!user) return
+    try {
+      const notes = await getNotes(user.id)
+      setNotes(notes)
+    } catch (error) {
+      console.error('Error fetching notes:', error)
+    }
+  }, [user])
+
+  const fetchUserTags = useCallback(async () => {
+    if (!user) return
+    try {
+      const tags = await getUserTags(user.id)
+      setUserTags(tags)
+    } catch (error) {
+      console.error('Error fetching tags:', error)
+    }
+  }, [user])
+
   const initializeData = useCallback(async () => {
     if (!user) return
     
@@ -624,98 +644,20 @@ export default function Notes() {
     }
   }, [fetchNotes, fetchUserTags])
 
-  const fetchNotes = useCallback(async () => {
+  const filterNotes = useCallback(async (type: 'tag' | 'search', value: string) => {
     if (!user) return
     try {
-      const data = await getNotes(user.id)
-      setNotes(data)
+      let filteredNotes: Note[] = []
+      if (type === 'tag') {
+        filteredNotes = await getNotesByTag(value, user.id)
+      } else {
+        filteredNotes = await searchNotes(value, user.id)
+      }
+      setNotes(filteredNotes)
     } catch (error) {
-      console.error('Error fetching notes:', error)
-      toast.error('Failed to load notes')
+      console.error('Error filtering notes:', error)
     }
   }, [user])
-
-  const fetchUserTags = useCallback(async () => {
-    if (!user) return
-    try {
-      const tags = await getUserTags(user.id)
-      setUserTags(tags)
-    } catch (error) {
-      console.error('Error fetching tags:', error)
-    }
-  }, [user])
-
-  const filterNotes = useCallback(async () => {
-    if (!user) return;
-    
-    try {
-      let filtered: ExtendedNote[] = [];
-      
-      // Apply active tab filter
-      switch (activeTab) {
-        case 'pinned':
-          filtered = notes.filter(note => note.metadata?.is_pinned);
-          break;
-        case 'recent':
-          filtered = notes.filter(note => {
-            const isRecent = dayjs().diff(dayjs(note.updated_at), 'day') <= 7;
-            return isRecent;
-          });
-          break;
-        case 'starred':
-          filtered = notes.filter(note => note.metadata?.is_favorite);
-          break;
-        default:
-          // If we have a search query or tag filter, use server-side filtering
-          if (debouncedSearchQuery || selectedTag) {
-            if (debouncedSearchQuery && selectedTag) {
-              // If both search and tag are present, get notes by tag first
-              const tagNotes = await getNotesByTag(user.id, selectedTag);
-              // Then filter those notes by search query
-              filtered = tagNotes.filter(note =>
-                note.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                (note.content && note.content.toLowerCase().includes(searchQuery.toLowerCase())) ||
-                (note.tags && note.tags.some(tag => tag.toLowerCase().includes(searchQuery.toLowerCase())))
-              );
-            } else if (searchQuery) {
-              // If only search query is present
-              filtered = await searchNotes(user.id, searchQuery);
-            } else if (selectedTag) {
-              // If only tag is present
-              filtered = await getNotesByTag(user.id, selectedTag);
-            }
-          } else {
-            // If no search or tag filter, use all notes
-            filtered = notes;
-          }
-      }
-
-      // Apply color filter
-      if (selectedColor) {
-        filtered = filtered.filter(note => note.color === selectedColor);
-      }
-
-      // Apply type filter
-      if (selectedType) {
-        filtered = filtered.filter(note => note.note_type === selectedType);
-      }
-
-      // Apply archive filter
-      filtered = filtered.filter(note => showArchived ? note.is_archived : !note.is_archived);
-
-      // Sort: pinned first, then by updated date
-      filtered.sort((a, b) => {
-        if (a.metadata?.is_pinned && !b.metadata?.is_pinned) return -1;
-        if (!a.metadata?.is_pinned && b.metadata?.is_pinned) return 1;
-        return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime();
-      });
-
-      setFilteredNotes(filtered);
-    } catch (error) {
-      console.error('Error filtering notes:', error);
-      toast.error('Failed to filter notes');
-    }
-  }, [notes, searchQuery, selectedTag, selectedColor, selectedType, showArchived, activeTab, user, debouncedSearchQuery]);
 
   useEffect(() => {
     if (!user) return
@@ -735,50 +677,28 @@ export default function Notes() {
 
   // Filter notes when search or filters change
   useEffect(() => {
-    filterNotes()
-  }, [filterNotes])
+    filterNotes('search', searchQuery)
+  }, [searchQuery, filterNotes])
 
   const handleCreateNote = async () => {
-    if (!user || !newNote.title.trim()) return
-
+    if (!user) return
     try {
-      const noteData = await createNote(user.id, {
-        title: newNote.title.trim(),
-        content: newNote.content.trim() || undefined,
-        color: newNote.color,
-        note_type: newNote.note_type,
-        tags: newNote.tags.length > 0 ? newNote.tags : undefined,
-        metadata: {
-          is_pinned: newNote.is_pinned,
-          font_family: newNote.font_family
-        }
-      })
-      
-      // Optimistic update
-      setNotes(prev => [noteData, ...prev])
-      
-      // Reset form
-      setNewNote({
-        title: '',
+      const newNote = await createNote({
+        title: 'New Note',
         content: '',
+        user_id: user.id,
         color: '#ffffff',
-        note_type: 'text',
         tags: [],
+        note_type: 'text',
+        metadata: {},
+        is_archived: false,
         is_pinned: false,
-        font_family: 'font-sans'
+        word_count: 0,
+        character_count: 0
       })
-      setNewNoteDialogOpen(false)
-      
-      toast.success('Note created successfully')
-      
-      // Refetch to ensure consistency
-      setTimeout(() => {
-        fetchNotes()
-        fetchUserTags()
-      }, 100)
+      setNotes(prev => [newNote, ...prev])
     } catch (error) {
       console.error('Error creating note:', error)
-      toast.error('Failed to create note')
     }
   }
 
@@ -825,15 +745,11 @@ export default function Notes() {
   }
 
   const handleDuplicateNote = async (noteId: string) => {
-    if (!user) return
-    
     try {
-      const duplicatedNote = await duplicateNote(user.id, noteId)
+      const duplicatedNote = await duplicateNote(noteId)
       setNotes(prev => [duplicatedNote, ...prev])
-      toast.success('Note duplicated successfully')
     } catch (error) {
       console.error('Error duplicating note:', error)
-      toast.error('Failed to duplicate note')
     }
   }
 
@@ -1075,31 +991,26 @@ export default function Notes() {
   }
 
   // Add new functions in the Notes component
-  const handleUpload = async (files: FileList) => {
-    setIsUploading(true)
+  const handleUpload = async (file: File) => {
+    if (!user) return
     try {
-      // Process each file
-      for (const file of Array.from(files)) {
-        const reader = new FileReader()
-        reader.onload = async (e) => {
-          const content = e.target?.result as string
-          await createNote(user!.id, {
-            title: file.name,
-            content,
-            note_type: 'text',
-            metadata: {
-              uploaded_at: new Date().toISOString()
-            }
-          })
-        }
-        reader.readAsText(file)
-      }
-      toast.success('Files uploaded successfully')
+      const content = await file.text()
+      const newNote = await createNote({
+        title: file.name,
+        content,
+        user_id: user.id,
+        color: '#ffffff',
+        tags: [],
+        note_type: 'text',
+        metadata: {},
+        is_archived: false,
+        is_pinned: false,
+        word_count: content.split(/\s+/).length,
+        character_count: content.length
+      })
+      setNotes(prev => [newNote, ...prev])
     } catch (error) {
-      console.error('Error uploading files:', error)
-      toast.error('Failed to upload files')
-    } finally {
-      setIsUploading(false)
+      console.error('Error uploading file:', error)
     }
   }
 
@@ -1171,7 +1082,7 @@ export default function Notes() {
               multiple
               className="hidden"
               id="file-upload"
-              onChange={(e) => e.target.files && handleUpload(e.target.files)}
+              onChange={(e) => e.target.files && handleUpload(e.target.files[0])}
             />
             <Button
               variant="outline"
