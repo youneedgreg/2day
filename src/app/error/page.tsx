@@ -24,7 +24,14 @@ import {
 } from "lucide-react"
 import { toast } from 'sonner'
 
-interface ErrorPageProps {
+// Next.js error page props (for error.tsx files)
+interface NextErrorProps {
+  error: Error & { digest?: string };
+  reset: () => void;
+}
+
+// Custom error page props (for general use)
+interface CustomErrorProps {
   error?: Error & { digest?: string } | null;
   reset?: () => void;
   statusCode?: number;
@@ -32,13 +39,16 @@ interface ErrorPageProps {
   description?: string;
 }
 
-export default function ErrorPage({ 
-  error, 
-  reset, 
-  statusCode = 500,
-  title,
-  description 
-}: ErrorPageProps) {
+// Union type for flexibility
+type ErrorPageProps = NextErrorProps | CustomErrorProps;
+
+export default function ErrorPage(props: ErrorPageProps) {
+  // Handle both Next.js error boundary props and custom props
+  const error = props.error;
+  const reset = props.reset;
+  const statusCode = 'statusCode' in props ? props.statusCode || 500 : 500;
+  const title = 'title' in props ? props.title : undefined;
+  const description = 'description' in props ? props.description : undefined;
   const router = useRouter()
   const [isRetrying, setIsRetrying] = useState(false)
   const [mounted, setMounted] = useState(false)
@@ -438,3 +448,6 @@ export default function ErrorPage({
     </div>
   )
 }
+
+// Export specifically for Next.js error boundaries (error.tsx files)
+export { ErrorPage as Error }
