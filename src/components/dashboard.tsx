@@ -48,11 +48,6 @@ dayjs.extend(customParseFormat)
 // Types from database
 type Reminder = Database['public']['Tables']['reminders']['Row']
 type Note = Database['public']['Tables']['notes']['Row']
-type TodoWithRelations = Database['public']['Tables']['todos']['Row'] & {
-  notes?: Database['public']['Tables']['todo_notes']['Row'][]
-  timer?: Database['public']['Tables']['todo_timers']['Row'] | null
-  children?: TodoWithRelations[]
-}
 
 // Card configuration types
 export type CardType = 'habits' | 'tasks' | 'streak' | 'reminders' | 'notes' | 'habitChart' | 'taskChart' | 'activitySummary'
@@ -175,10 +170,10 @@ export default function Dashboard() {
       setHabits(habitsData)
       setTodos(todosData.filter(todo => todo.status !== 'archived'))
       setReminders(remindersData.filter(reminder => reminder.status !== 'dismissed'))
-      setNotes(notesData.filter(note => !note.is_archived))
+      setNotes(notesData)
       
     } catch (error) {
-      console.error('Error loading dashboard data:', error)
+      console.error('Error loading dashboard data:', error?.message || error)
       toast.error('Failed to load dashboard data')
     } finally {
       setLoading(false)
