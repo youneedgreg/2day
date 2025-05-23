@@ -154,31 +154,71 @@ export default function Dashboard() {
   const [isConfigOpen, setIsConfigOpen] = useState(false)
 
   // Load all data from database
-  const loadData = useCallback(async () => {
-    if (!user) return
+  // UPDATED: Replace your loadData function in the dashboard with this version
+
+const loadData = useCallback(async () => {
+  if (!user) return
+  
+  try {
+    setLoading(true)
     
-    try {
-      setLoading(true)
-      
-      const [habitsData, todosData, remindersData, notesData] = await Promise.all([
-        getHabits(user.id),
-        getTodos(user.id),
-        getReminders(user.id),
-        getNotes(user.id)
-      ])
-      
-      setHabits(habitsData)
-      setTodos(todosData.filter(todo => todo.status !== 'archived'))
-      setReminders(remindersData.filter(reminder => reminder.status !== 'dismissed'))
-      setNotes(notesData)
-      
-    } catch (error) {
-      console.error('Error loading dashboard data:', error?.message || error)
-      toast.error('Failed to load dashboard data')
-    } finally {
-      setLoading(false)
+    // Load data with individual error handling
+    const [habitsResult, todosResult, remindersResult, notesResult] = await Promise.allSettled([
+      getHabits(user.id),
+      getTodos(user.id),
+      getReminders(user.id),
+      getNotes(user.id)
+    ])
+    
+    // Handle habits
+    if (habitsResult.status === 'fulfilled') {
+      setHabits(habitsResult.value)
+    } else {
+      console.error('Error loading habits:', habitsResult.reason)
+      setHabits([])
+      toast.error('Failed to load habits')
     }
-  }, [user])
+    
+    // Handle todos
+    if (todosResult.status === 'fulfilled') {
+      setTodos(todosResult.value.filter(todo => todo.status !== 'archived'))
+    } else {
+      console.error('Error loading todos:', todosResult.reason)
+      setTodos([])
+      toast.error('Failed to load tasks')
+    }
+    
+    // Handle reminders with specific error handling
+    if (remindersResult.status === 'fulfilled') {
+      setReminders(remindersResult.value.filter(reminder => reminder.status !== 'dismissed'))
+    } else {
+      console.error('Error loading reminders:', remindersResult.reason)
+      setReminders([])
+      // Show specific error message if it's a schema issue
+      if (remindersResult.reason?.message?.includes('due_date does not exist') || 
+          remindersResult.reason?.message?.includes('column') && remindersResult.reason?.message?.includes('does not exist')) {
+        toast.error('Reminders feature needs database updates')
+      } else {
+        toast.error('Failed to load reminders')
+      }
+    }
+    
+    // Handle notes
+    if (notesResult.status === 'fulfilled') {
+      setNotes(notesResult.value)
+    } else {
+      console.error('Error loading notes:', notesResult.reason)
+      setNotes([])
+      toast.error('Failed to load notes')
+    }
+    
+  } catch (error) {
+    console.error('Error loading dashboard data:', error?.message || error)
+    toast.error('Failed to load some dashboard data')
+  } finally {
+    setLoading(false)
+  }
+}, [user])
 
   // Load data on component mount
   useEffect(() => {
