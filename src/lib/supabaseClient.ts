@@ -179,6 +179,7 @@ export type Database = {
       }
       reminders: {
         Row: {
+          status: string
           id: string
           title: string
           description: string | null
