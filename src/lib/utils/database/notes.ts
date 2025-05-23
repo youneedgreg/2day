@@ -62,7 +62,39 @@ export async function getNotes(userId: string): Promise<Note[]> {
     .order('created_at', { ascending: false })
   
   if (error) throw error
-  return notes
+  return notes || []
+}
+
+// ADDED: Subscribe to real-time notes changes (MISSING FUNCTION)
+export function subscribeToNotesChanges(userId: string, callback: (notes: Note[]) => void) {
+  const supabase = createClient()
+  
+  const channel = supabase
+    .channel('notes-changes')
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'notes',
+        filter: `user_id=eq.${userId}`
+      },
+      async () => {
+        // Reload notes when changes occur
+        try {
+          const notes = await getNotes(userId)
+          callback(notes)
+        } catch (error) {
+          console.error('Error reloading notes:', error)
+        }
+      }
+    )
+    .subscribe()
+
+  // Return unsubscribe function
+  return () => {
+    supabase.removeChannel(channel)
+  }
 }
 
 // Create a new note
@@ -118,7 +150,7 @@ export async function searchNotes(query: string, userId: string): Promise<Note[]
     .order('created_at', { ascending: false })
   
   if (error) throw error
-  return notes
+  return notes || []
 }
 
 // Get notes by tag
@@ -133,7 +165,7 @@ export async function getNotesByTag(tag: string, userId: string): Promise<Note[]
     .order('created_at', { ascending: false })
   
   if (error) throw error
-  return notes
+  return notes || []
 }
 
 // Get all unique tags for a user
@@ -172,7 +204,7 @@ export async function getNotesByColor(userId: string, color: string): Promise<No
     .order('created_at', { ascending: false })
 
   if (error) throw error
-  return notes
+  return notes || []
 }
 
 // Get notes by type
@@ -187,7 +219,7 @@ export async function getNotesByType(userId: string, noteType: 'text' | 'rich_te
     .order('created_at', { ascending: false })
 
   if (error) throw error
-  return notes
+  return notes || []
 }
 
 // Duplicate a note
@@ -255,5 +287,5 @@ export async function getRecentNotes(userId: string, limit: number = 5): Promise
     .limit(limit)
   
   if (error) throw error
-  return notes
+  return notes || []
 }
