@@ -24,12 +24,15 @@ import {
 } from "lucide-react"
 import { toast } from 'sonner'
 
+export default function Error({ error, reset }: { error: Error & { digest?: string }, reset: () => void }) {
+  const statusCode = 500;
+  const title = undefined;
 interface ErrorPageProps {
-  error?: Error & { digest?: string }
-  reset?: () => void
-  statusCode?: number
-  title?: string
-  description?: string
+  error?: Error & { digest?: string } | null;
+  reset?: () => void;
+  statusCode?: number;
+  title?: string;
+  description?: string;
 }
 
 export default function ErrorPage({ 
