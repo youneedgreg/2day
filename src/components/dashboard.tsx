@@ -195,8 +195,9 @@ const loadData = useCallback(async () => {
       console.error('Error loading reminders:', remindersResult.reason)
       setReminders([])
       // Show specific error message if it's a schema issue
-      if (remindersResult.reason?.message?.includes('due_date does not exist') || 
-          remindersResult.reason?.message?.includes('column') && remindersResult.reason?.message?.includes('does not exist')) {
+      const error = remindersResult.reason as Error
+      if (error?.message?.includes('due_date does not exist') || 
+          error?.message?.includes('column') && error?.message?.includes('does not exist')) {
         toast.error('Reminders feature needs database updates')
       } else {
         toast.error('Failed to load reminders')
@@ -212,8 +213,9 @@ const loadData = useCallback(async () => {
       toast.error('Failed to load notes')
     }
     
-  } catch (error) {
-    console.error('Error loading dashboard data:', error?.message || error)
+  } catch (error: unknown) {
+    const err = error as Error
+    console.error('Error loading dashboard data:', err?.message || error)
     toast.error('Failed to load some dashboard data')
   } finally {
     setLoading(false)
