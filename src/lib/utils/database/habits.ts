@@ -6,6 +6,7 @@ import type { RealtimePostgresChangesPayload } from '@supabase/supabase-js'
 type Habit = Database['public']['Tables']['habits']['Row']
 type HabitCompletion = Database['public']['Tables']['habit_completions']['Row']
 
+// UPDATED: Changed from 'completions' to 'habit_completions' to match dashboard expectations
 export interface HabitWithCompletions extends Habit {
   habit_completions: HabitCompletion[]
 }
@@ -23,8 +24,8 @@ export interface CompleteHabitInput {
   completed_at?: string // ISO date string, defaults to now
 }
 
-// Get all habits for a user with their completions
-export async function getHabits(userId: string) {
+// UPDATED: Get all habits for a user with their completions - returns habit_completions property
+export async function getHabits(userId: string): Promise<HabitWithCompletions[]> {
   const supabase = createClient()
   
   const { data: habits, error: habitsError } = await supabase
@@ -43,13 +44,63 @@ export async function getHabits(userId: string) {
   
   if (completionsError) throw completionsError
   
+  // CHANGED: Return with 'habit_completions' property instead of 'completions'
   return habits.map(habit => ({
     ...habit,
-    completions: completions.filter(completion => completion.habit_id === habit.id)
+    habit_completions: completions.filter(completion => completion.habit_id === habit.id)
   }))
 }
 
-// Create a new habit
+// ADDED: Subscribe to real-time habit changes (MISSING FUNCTION)
+export function subscribeToHabitChanges(userId: string, callback: (habits: HabitWithCompletions[]) => void) {
+  const supabase = createClient()
+  
+  const channel = supabase
+    .channel('habits-changes')
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'habits',
+        filter: `user_id=eq.${userId}`
+      },
+      async () => {
+        // Reload habits when changes occur
+        try {
+          const habits = await getHabits(userId)
+          callback(habits)
+        } catch (error) {
+          console.error('Error reloading habits:', error)
+        }
+      }
+    )
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'habit_completions'
+      },
+      async () => {
+        // Reload habits when completions change
+        try {
+          const habits = await getHabits(userId)
+          callback(habits)
+        } catch (error) {
+          console.error('Error reloading habits:', error)
+        }
+      }
+    )
+    .subscribe()
+
+  // Return unsubscribe function
+  return () => {
+    supabase.removeChannel(channel)
+  }
+}
+
+// UPDATED: Create a new habit - returns habit_completions property
 export async function createHabit(habit: Omit<Habit, 'id' | 'created_at' | 'updated_at'>) {
   const supabase = createClient()
   
@@ -71,11 +122,11 @@ export async function createHabit(habit: Omit<Habit, 'id' | 'created_at' | 'upda
   
   return {
     ...data,
-    completions
+    habit_completions: completions // Changed from 'completions' to 'habit_completions'
   }
 }
 
-// Update a habit
+// UPDATED: Update a habit - returns habit_completions property
 export async function updateHabit(id: string, updates: Partial<Habit>) {
   const supabase = createClient()
   
@@ -98,7 +149,7 @@ export async function updateHabit(id: string, updates: Partial<Habit>) {
   
   return {
     ...habit,
-    completions
+    habit_completions: completions // Changed from 'completions' to 'habit_completions'
   }
 }
 
