@@ -48,6 +48,11 @@ dayjs.extend(customParseFormat)
 // Types from database
 type Reminder = Database['public']['Tables']['reminders']['Row']
 type Note = Database['public']['Tables']['notes']['Row']
+type TodoWithRelations = Database['public']['Tables']['todos']['Row'] & {
+  notes?: Database['public']['Tables']['todo_notes']['Row'][]
+  timer?: Database['public']['Tables']['todo_timers']['Row'] | null
+  children?: TodoWithRelations[]
+}
 
 // Card configuration types
 export type CardType = 'habits' | 'tasks' | 'streak' | 'reminders' | 'notes' | 'habitChart' | 'taskChart' | 'activitySummary'

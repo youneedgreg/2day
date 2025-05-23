@@ -10,7 +10,7 @@ export async function middleware(request: NextRequest) {
   })
 
   // Use the same server-side Supabase client as the rest of the app
-  const supabase = createServerSupabaseClient()
+  const supabase = await createServerSupabaseClient()
 
   // Refresh session if expired - required for Server Components
   await supabase.auth.getUser()
