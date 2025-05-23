@@ -254,8 +254,31 @@ export default function ActivityStream() {
       processActivities(
         habitsData,
         todosData.filter(todo => todo.status !== 'archived'),
-        remindersData.filter(reminder => reminder.status !== 'dismissed'),
-        notesData.filter(note => !note.is_archived)
+        remindersData.map(reminder => ({
+          ...reminder,
+          reminder_time: reminder.due_date,
+          repeat_frequency: null,
+          status: reminder.completed ? 'completed' as const : 'pending' as const,
+          priority: null,
+          completed_at: reminder.completed ? reminder.updated_at : null,
+          updated_at: reminder.updated_at || reminder.created_at,
+          is_recurring: false,
+          reminder_metadata: null
+        })),
+        notesData.map(note => ({
+          ...note,
+          content: note.content || null,
+          color: null,
+          tags: null,
+          note_type: 'text' as const,
+          metadata: null,
+          space_id: null,
+          is_pinned: false,
+          is_archived: false,
+          updated_at: note.updated_at || note.created_at,
+          word_count: note.content ? note.content.split(/\s+/).length : 0,
+          character_count: note.content ? note.content.length : 0
+        }))
       )
       
     } catch (error) {
