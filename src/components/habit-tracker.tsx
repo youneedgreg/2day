@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react"
 import { motion, AnimatePresence } from "framer-motion"
-import { Plus, X, Check, Trash2, ArrowUp, ArrowDown, Flame, Calendar, Sparkles, Target, TrendingUp, Award } from "lucide-react"
+import { Plus, X, Check, Trash2, ArrowUp, ArrowDown, Calendar, Sparkles, Target, TrendingUp, Award } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -72,11 +72,6 @@ export default function HabitTracker() {
     }
   }, [user])
 
-  // Handle real-time updates
-  const handleRealTimeUpdate = (habits: HabitWithCompletions[]) => {
-    setHabits(habits)
-  }
-
   useEffect(() => {
     if (!user) return
 
@@ -93,7 +88,7 @@ export default function HabitTracker() {
         subscription()
       }
     }
-  }, [user, fetchHabits, handleRealTimeUpdate])
+  }, [user, fetchHabits])
 
   const handleCreateHabit = async () => {
     if (!user || !newHabit.trim()) return
@@ -104,9 +99,11 @@ export default function HabitTracker() {
         frequency: 'daily',
         habit_type: habitType,
         frequency_days: frequency,
+        user_id: user.id,
+        description: JSON.stringify({ type: habitType, frequency_days: frequency })
       }
 
-      const newHabitData = await createHabit(user.id, habitInput)
+      const newHabitData = await createHabit(habitInput)
       
       // Optimistic update
       setHabits(currentHabits => [newHabitData, ...currentHabits])
@@ -147,10 +144,7 @@ export default function HabitTracker() {
         toast.success('Habit unmarked')
       } else {
         // Complete the habit
-        await completeHabit({ 
-          habit_id: habitId, 
-          completed_at: new Date(`${targetDate}T12:00:00Z`).toISOString() 
-        })
+        await completeHabit(habitId)
         toast.success('Habit completed!')
       }
     } catch (error) {
@@ -493,7 +487,7 @@ export default function HabitTracker() {
                               <div className="flex gap-1 text-xs text-muted-foreground">
                                 {metadata.frequency_days.length > 0 ? (
                                   <div className="flex gap-1">
-                                    {metadata.frequency_days.map((day) => (
+                                    {metadata.frequency_days.map((day: string) => (
                                       <Badge key={day} variant="outline" className="text-xs px-2 py-0">
                                         {day}
                                       </Badge>
