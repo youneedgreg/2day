@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabaseClient'
+import { createClient } from '@/lib/supabaseBrowserClient'
 import type { Database } from '@/lib/supabaseClient'
 
 // Create a client-side Supabase client

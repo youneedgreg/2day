@@ -1,5 +1,5 @@
 // lib/utils/database/reminders.ts
-import { createClient } from '@/lib/supabaseClient'
+import { createClient } from '@/lib/supabaseBrowserClient'
 import type { Database } from '@/lib/supabaseClient'
 import type { RealtimePostgresChangesPayload } from '@supabase/supabase-js'
 

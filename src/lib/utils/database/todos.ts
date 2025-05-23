@@ -1,5 +1,5 @@
 // lib/utils/database/todos.ts
-import { createClient } from '@/lib/supabaseClient'
+import { createClient } from '@/lib/supabaseBrowserClient'
 import type { Database } from '@/lib/supabaseClient'
 
 type Todo = Database['public']['Tables']['todos']['Row']
