@@ -21,7 +21,6 @@ import { getHabits, type HabitWithCompletions } from '@/lib/utils/database/habit
 import { getTodos, type TodoWithRelations } from '@/lib/utils/database/todos'
 import { getReminders } from '@/lib/utils/database/reminders'
 import { getNotes } from '@/lib/utils/database/notes'
-import { Database } from '@/lib/types/database'
 import dayjs from 'dayjs'
 import utc from 'dayjs/plugin/utc'
 import timezone from 'dayjs/plugin/timezone'
@@ -46,8 +45,43 @@ dayjs.extend(isTomorrow)
 dayjs.extend(customParseFormat)
 
 // Types from database
-type Reminder = Database['public']['Tables']['reminders']['Row']
-type Note = Database['public']['Tables']['notes']['Row']
+type Reminder = {
+  id: string;
+  user_id: string;
+  title: string;
+  description: string | null;
+  reminder_time: string;
+  repeat_frequency: string | null;
+  status: "completed" | "pending" | "dismissed";
+  priority: "high" | "medium" | "low" | null;
+  completed_at: string | null;
+  due_date: string | null;
+  space_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+type NoteMetadata = {
+  version?: number;
+  lastEdited?: string;
+  [key: string]: unknown;
+}
+
+type Note = {
+  id: string;
+  user_id: string;
+  title: string;
+  content: string | null;
+  color: string | null;
+  tags: string[] | null;
+  note_type: "text" | "rich_text" | "drawing" | "checklist" | null;
+  metadata: NoteMetadata | null;
+  space_id: string | null;
+  is_pinned: boolean;
+  is_archived: boolean;
+  created_at: string;
+  updated_at: string;
+}
 
 // Card configuration types
 export type CardType = 'habits' | 'tasks' | 'streak' | 'reminders' | 'notes' | 'habitChart' | 'taskChart' | 'activitySummary'
@@ -190,27 +224,39 @@ const loadData = useCallback(async () => {
     
     // Handle reminders with specific error handling
     if (remindersResult.status === 'fulfilled') {
-      setReminders(remindersResult.value.filter(reminder => reminder.status !== 'dismissed'))
+      const mappedReminders = remindersResult.value.map(reminder => ({
+        ...reminder,
+        reminder_time: reminder.due_date,
+        repeat_frequency: null,
+        status: reminder.completed ? 'completed' as const : 'pending' as const,
+        priority: null,
+        completed_at: reminder.completed ? reminder.updated_at : null,
+        updated_at: reminder.updated_at || reminder.created_at
+      }))
+      setReminders(mappedReminders)
     } else {
       console.error('Error loading reminders:', remindersResult.reason)
       setReminders([])
-      // Show specific error message if it's a schema issue
-      const error = remindersResult.reason as Error
-      if (error?.message?.includes('due_date does not exist') || 
-          error?.message?.includes('column') && error?.message?.includes('does not exist')) {
-        toast.error('Reminders feature needs database updates')
-      } else {
-        toast.error('Failed to load reminders')
-      }
     }
     
     // Handle notes
     if (notesResult.status === 'fulfilled') {
-      setNotes(notesResult.value)
+      const mappedNotes = notesResult.value.map(note => ({
+        ...note,
+        content: note.content || null,
+        color: null,
+        tags: null,
+        note_type: 'text' as const,
+        metadata: null as NoteMetadata | null,
+        space_id: null,
+        is_pinned: false,
+        is_archived: false,
+        updated_at: note.updated_at || note.created_at
+      }))
+      setNotes(mappedNotes)
     } else {
       console.error('Error loading notes:', notesResult.reason)
       setNotes([])
-      toast.error('Failed to load notes')
     }
     
   } catch (error: unknown) {

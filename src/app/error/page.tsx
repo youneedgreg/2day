@@ -25,30 +25,12 @@ import {
 import { toast } from 'sonner'
 
 // Next.js error page props (for error.tsx files)
-interface NextErrorProps {
+interface ErrorProps {
   error: Error & { digest?: string };
   reset: () => void;
 }
 
-// Custom error page props (for general use)
-interface CustomErrorProps {
-  error?: Error & { digest?: string } | null;
-  reset?: () => void;
-  statusCode?: number;
-  title?: string;
-  description?: string;
-}
-
-// Union type for flexibility
-type ErrorPageProps = NextErrorProps | CustomErrorProps;
-
-export default function ErrorPage(props: ErrorPageProps) {
-  // Handle both Next.js error boundary props and custom props
-  const error = props.error;
-  const reset = props.reset;
-  const statusCode = 'statusCode' in props ? props.statusCode || 500 : 500;
-  const title = 'title' in props ? props.title : undefined;
-  const description = 'description' in props ? props.description : undefined;
+export default function Error({ error, reset }: ErrorProps) {
   const router = useRouter()
   const [isRetrying, setIsRetrying] = useState(false)
   const [mounted, setMounted] = useState(false)
@@ -58,56 +40,21 @@ export default function ErrorPage(props: ErrorPageProps) {
     setMounted(true)
   }, [])
 
-  // Get error details based on status code or error message
+  // Get error details based on error message
   const getErrorDetails = () => {
-    if (title && description) {
-      return { title, description, icon: AlertTriangle, color: "orange" }
+    if (error?.message?.includes('Network')) {
+      return {
+        title: "Network Error",
+        description: "Please check your internet connection and try again.",
+        icon: WifiOff,
+        color: "yellow"
+      }
     }
-
-    switch (statusCode) {
-      case 404:
-        return {
-          title: "Page Not Found",
-          description: "The page you're looking for doesn't exist or has been moved.",
-          icon: HelpCircle,
-          color: "blue"
-        }
-      case 403:
-        return {
-          title: "Access Denied",
-          description: "You don't have permission to access this resource.",
-          icon: Shield,
-          color: "red"
-        }
-      case 500:
-        return {
-          title: "Internal Server Error",
-          description: "Something went wrong on our end. Our team has been notified.",
-          icon: Server,
-          color: "red"
-        }
-      case 503:
-        return {
-          title: "Service Unavailable",
-          description: "The service is temporarily unavailable. Please try again later.",
-          icon: WifiOff,
-          color: "yellow"
-        }
-      default:
-        if (error?.message?.includes('Network')) {
-          return {
-            title: "Network Error",
-            description: "Please check your internet connection and try again.",
-            icon: WifiOff,
-            color: "yellow"
-          }
-        }
-        return {
-          title: "Something Went Wrong",
-          description: "An unexpected error occurred. Please try again or contact support if the problem persists.",
-          icon: AlertTriangle,
-          color: "orange"
-        }
+    return {
+      title: "Something Went Wrong",
+      description: "An unexpected error occurred. Please try again or contact support if the problem persists.",
+      icon: AlertTriangle,
+      color: "orange"
     }
   }
 
@@ -146,7 +93,7 @@ export default function ErrorPage(props: ErrorPageProps) {
   const copyErrorDetails = async () => {
     const errorInfo = {
       timestamp: new Date().toISOString(),
-      statusCode,
+      statusCode: 500,
       message: error?.message || errorDetails.description,
       digest: error?.digest,
       url: window.location.href,
@@ -257,7 +204,7 @@ export default function ErrorPage(props: ErrorPageProps) {
                     'border-orange-200 text-orange-700 dark:border-orange-800 dark:text-orange-400'
                   }`}
                 >
-                  Error {statusCode}
+                  Error 500
                 </Badge>
               </motion.div>
 
@@ -450,4 +397,4 @@ export default function ErrorPage(props: ErrorPageProps) {
 }
 
 // Export specifically for Next.js error boundaries (error.tsx files)
-export { ErrorPage as Error }
+export { Error as Error }
