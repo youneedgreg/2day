@@ -28,23 +28,16 @@ import { Textarea } from "@/components/ui/textarea"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { useAuth } from '@/hooks/useAuth'
 import { 
-  getReminders, 
-  createReminder, 
   updateReminder,
   completeReminder,
   dismissReminder,
-  getUpcomingReminders,
-  getOverdueReminders,
-  subscribeToReminderChanges 
+  subscribeToReminders
 } from '@/lib/utils/database/reminders'
 import { 
-  getReminderSpaces, 
   createReminderSpace, 
   deleteReminderSpace,
-  getDefaultReminderSpace,
   type ReminderSpace 
 } from '@/lib/utils/database/reminder-spaces'
-import { Database } from '@/lib/types/database'
 import dayjs from 'dayjs'
 import relativeTime from 'dayjs/plugin/relativeTime'
 import isToday from 'dayjs/plugin/isToday'
@@ -52,6 +45,9 @@ import isTomorrow from 'dayjs/plugin/isTomorrow'
 import customParseFormat from 'dayjs/plugin/customParseFormat'
 import { toast } from 'sonner'
 import { cn } from "@/lib/utils"
+import { createClient } from '@/lib/supabase/client'
+import { Database } from '@/lib/types/database'
+import { RealtimePostgresChangesPayload } from '@supabase/supabase-js'
 
 // Initialize dayjs plugins
 dayjs.extend(relativeTime)
@@ -60,23 +56,12 @@ dayjs.extend(isTomorrow)
 dayjs.extend(customParseFormat)
 
 // Define types
-type Priority = "low" | "medium" | "high"
+type Priority = 'low' | 'medium' | 'high'
 type RepeatFrequency = "none" | "daily" | "weekly" | "monthly"
-type Reminder = Database['public']['Tables']['reminders']['Row'] & {
-  location?: string;
-  tags?: string[];
-  is_archived?: boolean;
-}
+type ReminderStatus = "pending" | "completed" | "dismissed"
+type Reminder = Database['public']['Tables']['reminders']['Row']
 type FilterType = 'all' | 'high-priority' | 'today' | 'this-week' | 'overdue' | 'completed' | 'recurring'
 type ViewMode = 'card' | 'list' | 'compact'
-
-// Type for real-time subscription payload
-type RealtimePayload = {
-  eventType: 'INSERT' | 'UPDATE' | 'DELETE';
-  new?: Record<string, unknown>;
-  old?: Record<string, unknown>;
-  table: string;
-}
 
 // Available icons for spaces with enhanced selection
 const availableIcons = [
@@ -138,21 +123,21 @@ const formatReminderTime = (dateString: string): string => {
   }
 }
 
-const getPriorityColor = (priority: Priority): string => {
-  switch (priority) {
-    case 'high': return 'text-red-600 bg-red-50 border-red-200 dark:bg-red-950/20 dark:text-red-400'
-    case 'medium': return 'text-yellow-600 bg-yellow-50 border-yellow-200 dark:bg-yellow-950/20 dark:text-yellow-400'
-    case 'low': return 'text-green-600 bg-green-50 border-green-200 dark:bg-green-950/20 dark:text-green-400'
-    default: return 'text-gray-600 bg-gray-50 border-gray-200 dark:bg-gray-950/20 dark:text-gray-400'
-  }
-}
-
-const getPriorityIcon = (priority: Priority) => {
+const getPriorityIcon = (priority: string | null) => {
   switch (priority) {
     case 'high': return AlertCircle
     case 'medium': return Flag
     case 'low': return CheckCircle
     default: return Flag
+  }
+}
+
+const getPriorityColor = (priority: string | null): string => {
+  switch (priority) {
+    case 'high': return 'text-red-600 bg-red-50 border-red-200 dark:bg-red-950/20 dark:text-red-400'
+    case 'medium': return 'text-yellow-600 bg-yellow-50 border-yellow-200 dark:bg-yellow-950/20 dark:text-yellow-400'
+    case 'low': return 'text-green-600 bg-green-50 border-green-200 dark:bg-green-950/20 dark:text-green-400'
+    default: return 'text-gray-600 bg-gray-50 border-gray-200 dark:bg-gray-950/20 dark:text-gray-400'
   }
 }
 
@@ -163,28 +148,19 @@ const getStatusColor = (status: string, isOverdue: boolean) => {
 }
 
 // Update the CreateReminderInput type
-type CreateReminderInput = {
-  title: string;
-  description?: string;
-  reminder_time: string;
-  repeat_frequency: RepeatFrequency;
-  priority: Priority;
-  space_id: string;
-  location?: string;
-  tags?: string[];
-}
+// type CreateReminderInput = Omit<Reminder, 'id' | 'created_at' | 'updated_at'>
 
 // Update the UpdateReminderInput type
 type UpdateReminderInput = {
   title?: string;
   description?: string;
-  reminder_time?: string;
-  repeat_frequency?: "none" | "daily" | "weekly" | "monthly";
+  due_date?: string;
+  repeat_frequency?: RepeatFrequency;
   priority?: Priority;
   space_id?: string;
   location?: string;
   tags?: string[];
-  status?: 'pending' | 'completed' | 'dismissed';
+  status?: ReminderStatus;
 }
 
 export default function Reminders() {
@@ -203,15 +179,16 @@ export default function Reminders() {
   
   // New reminder form state
   const [newReminderDialogOpen, setNewReminderDialogOpen] = useState(false)
-  const [newReminder, setNewReminder] = useState({
+  const [newReminder, setNewReminder] = useState<Partial<Reminder>>({
     title: '',
     description: '',
-    reminder_time: '',
-    repeat_frequency: 'none' as RepeatFrequency,
-    priority: 'medium' as Priority,
-    space_id: '',
-    location: '',
-    tags: [] as string[]
+    due_date: '',
+    status: 'pending',
+    completed: false,
+    priority: 'medium',
+    repeat_frequency: 'none',
+    location: null,
+    tags: null
   })
   
   // Edit reminder state
@@ -237,119 +214,76 @@ export default function Reminders() {
   // Define fetchReminders first
   const fetchReminders = useCallback(async () => {
     if (!user) return
+
     try {
-      const [allReminders, upcomingReminders, overdueReminders] = await Promise.all([
-        getReminders(user.id),
-        getUpcomingReminders(user.id),
-        getOverdueReminders(user.id)
-      ])
-      
-      setReminders(allReminders)
-      
-      // Calculate stats
-      const completedCount = allReminders.filter(r => r.status === 'completed').length
+      setLoading(true)
+      const { data, error } = await createClient()
+        .from('reminders')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('due_date', { ascending: true })
+
+      if (error) throw error
+      setReminders(data || [])
+
+      // Update stats with proper types
+      const reminders = data || []
       setStats({
-        total: allReminders.length,
-        completed: completedCount,
-        overdue: overdueReminders.length,
-        upcoming: upcomingReminders.length
+        total: reminders.length,
+        completed: reminders.filter((r: Reminder) => r.status === 'completed').length,
+        overdue: reminders.filter((r: Reminder) => r.status === 'pending' && dayjs(r.due_date).isBefore(dayjs())).length,
+        upcoming: reminders.filter((r: Reminder) => dayjs(r.due_date).isAfter(dayjs())).length
       })
     } catch (error) {
       console.error('Error fetching reminders:', error)
       toast.error('Failed to load reminders')
-    }
-  }, [user])
-
-  // Then define initializeData
-  const initializeData = useCallback(async () => {
-    if (!user) return
-    
-    try {
-      // Fetch spaces first
-      const spacesData = await getReminderSpaces(user.id)
-      
-      // If no spaces exist, create a default one
-      if (spacesData.length === 0) {
-        const defaultSpace = await getDefaultReminderSpace(user.id)
-        setSpaces([defaultSpace])
-        setNewReminder(prev => ({ ...prev, space_id: defaultSpace.id }))
-      } else {
-        setSpaces(spacesData)
-        setNewReminder(prev => ({ ...prev, space_id: spacesData[0].id }))
-      }
-      
-      // Fetch all types of reminders
-      await fetchReminders()
-    } catch (error) {
-      console.error('Error initializing data:', error)
-      toast.error('Failed to load data')
     } finally {
       setLoading(false)
     }
-  }, [user, fetchReminders])
-
-  // Finally define handleRealTimeUpdate
-  const handleRealTimeUpdate = useCallback((payload: RealtimePayload) => {
-    if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE' || payload.eventType === 'DELETE') {
-      fetchReminders()
-    }
-  }, [fetchReminders])
+  }, [user])
 
   useEffect(() => {
-    if (!user) return
-
-    initializeData()
-
-    // Subscribe to real-time updates
-    const subscription = subscribeToReminderChanges(user.id, (payload) => {
-      console.log('Real-time reminder update:', payload)
-      handleRealTimeUpdate(payload)
-    })
-
-    return () => {
-      subscription.unsubscribe()
+    if (user) {
+      fetchReminders()
+      const subscription = subscribeToReminders((payload: RealtimePostgresChangesPayload<Reminder>) => {
+        if (payload.eventType === 'INSERT') {
+          setReminders(prev => [...prev, payload.new as Reminder])
+        } else if (payload.eventType === 'UPDATE') {
+          setReminders(prev => prev.map(r => r.id === payload.new.id ? payload.new as Reminder : r))
+        } else if (payload.eventType === 'DELETE') {
+          setReminders(prev => prev.filter(r => r.id !== payload.old.id))
+        }
+      })
+      return () => {
+        subscription.unsubscribe()
+      }
     }
-  }, [user, initializeData, handleRealTimeUpdate])
+  }, [user, fetchReminders])
 
   const handleCreateReminder = async () => {
-    if (!user || !newReminder.title.trim()) return
-
-    // Set default time if not provided
-    const reminderTime = newReminder.reminder_time || 
-      dayjs().add(1, 'hour').toISOString()
-
+    if (!user || !newReminder.title || !newReminder.due_date) return
     try {
-      const reminderData = await createReminder(user.id, {
-        title: newReminder.title.trim(),
-        description: newReminder.description.trim() || undefined,
-        reminder_time: reminderTime,
-        repeat_frequency: newReminder.repeat_frequency,
-        priority: newReminder.priority,
-        space_id: newReminder.space_id,
-        location: newReminder.location.trim() || undefined,
-        tags: newReminder.tags.length > 0 ? newReminder.tags : undefined
-      } as CreateReminderInput)
-      
-      // Optimistic update
-      setReminders(prev => [reminderData, ...prev])
-      
-      // Reset form
+      const { error } = await createClient()
+        .from('reminders')
+        .insert({
+          ...newReminder,
+          user_id: user.id,
+          created_at: new Date().toISOString()
+        })
+
+      if (error) throw error
       setNewReminder({
         title: '',
         description: '',
-        reminder_time: '',
-        repeat_frequency: 'none',
+        due_date: '',
+        status: 'pending',
+        completed: false,
         priority: 'medium',
-        space_id: spaces[0]?.id || '',
-        location: '',
-        tags: []
+        repeat_frequency: 'none',
+        location: null,
+        tags: null
       })
-      setNewReminderDialogOpen(false)
-      
       toast.success('Reminder created successfully')
-      
-      // Refetch to ensure consistency
-      setTimeout(fetchReminders, 100)
     } catch (error) {
       console.error('Error creating reminder:', error)
       toast.error('Failed to create reminder')
@@ -366,10 +300,11 @@ export default function Reminders() {
       const updateData = {
         ...updates,
         description: updates.description || undefined,
-        repeat_frequency: updates.repeat_frequency as RepeatFrequency | undefined,
-        priority: updates.priority as Priority | undefined,
-        space_id: updates.space_id || undefined
-      } satisfies UpdateReminderInput
+        repeat_frequency: updates.repeat_frequency,
+        priority: updates.priority,
+        space_id: updates.space_id || undefined,
+        status: updates.status
+      }
       
       await updateReminder(reminderId, updateData)
       toast.success('Reminder updated successfully')
@@ -468,7 +403,7 @@ export default function Reminders() {
   }
 
   const exportReminders = () => {
-    const dataStr = JSON.stringify(filteredReminders, null, 2)
+    const dataStr = JSON.stringify(reminders, null, 2)
     const dataBlob = new Blob([dataStr], { type: 'application/json' })
     const url = URL.createObjectURL(dataBlob)
     const link = document.createElement('a')
@@ -484,7 +419,7 @@ export default function Reminders() {
       try {
         await navigator.share({
           title: reminder.title,
-          text: `${reminder.title}\n${reminder.description || ''}\nDue: ${formatReminderTime(reminder.reminder_time)}`,
+          text: `${reminder.title}\n${reminder.description || ''}\nDue: ${formatReminderTime(reminder.due_date)}`,
           url: window.location.href
         })
       } catch {
@@ -492,14 +427,14 @@ export default function Reminders() {
       }
     } else {
       // Fallback: copy to clipboard
-      const shareText = `${reminder.title}\n${reminder.description || ''}\nDue: ${formatReminderTime(reminder.reminder_time)}`
+      const shareText = `${reminder.title}\n${reminder.description || ''}\nDue: ${formatReminderTime(reminder.due_date)}`
       await navigator.clipboard.writeText(shareText)
       toast.success('Reminder copied to clipboard')
     }
   }
 
-  // Advanced filtering logic
-  const filteredReminders = reminders.filter(reminder => {
+  // Update the filteredRemindersList function
+  const filteredRemindersList = reminders.filter(reminder => {
     // Search filter
     if (searchQuery) {
       const query = searchQuery.toLowerCase()
@@ -513,7 +448,7 @@ export default function Reminders() {
 
     // Advanced filters
     const now = dayjs()
-    const reminderDate = dayjs(reminder.reminder_time)
+    const reminderDate = dayjs(reminder.due_date)
     
     switch (activeFilter) {
       case 'high-priority':
@@ -529,30 +464,7 @@ export default function Reminders() {
       case 'recurring':
         return reminder.repeat_frequency !== 'none'
       default:
-        // Apply tab filters
-        switch (activeTab) {
-          case 'upcoming':
-            return reminder.status === 'pending' && reminderDate.isAfter(now)
-          case 'overdue':
-            return reminder.status === 'pending' && reminderDate.isBefore(now)
-          case 'completed':
-            return reminder.status === 'completed'
-          default:
-            return reminder.status === 'pending'
-        }
-    }
-  }).sort((a, b) => {
-    // Sorting logic
-    switch (sortBy) {
-      case 'priority':
-        const priorityOrder = { high: 3, medium: 2, low: 1 }
-        return (priorityOrder[b.priority || 'medium'] || 0) - (priorityOrder[a.priority || 'medium'] || 0)
-      case 'space':
-        const spaceA = getSpaceDetails(a.space_id)
-        const spaceB = getSpaceDetails(b.space_id)
-        return spaceA.name.localeCompare(spaceB.name)
-      default:
-        return dayjs(a.reminder_time).unix() - dayjs(b.reminder_time).unix()
+        return true
     }
   })
 
@@ -597,6 +509,28 @@ export default function Reminders() {
       scale: 0.95,
       transition: { duration: 0.2 }
     }
+  }
+
+  // Update the form field handlers
+  const handleDescriptionChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setNewReminder(prev => ({
+      ...prev,
+      description: e.target.value || undefined
+    }))
+  }
+
+  const handleSpaceIdChange = (value: string) => {
+    setNewReminder(prev => ({
+      ...prev,
+      space_id: value || undefined
+    }))
+  }
+
+  const handleRepeatFrequencyChange = (value: RepeatFrequency) => {
+    setNewReminder(prev => ({
+      ...prev,
+      repeat_frequency: value || undefined
+    }))
   }
 
   if (loading) {
@@ -665,7 +599,7 @@ export default function Reminders() {
           </div>
 
           {/* Selection Mode Toggle */}
-          {filteredReminders.length > 0 && (
+          {reminders.length > 0 && (
             <Button
               variant={isSelectionMode ? "default" : "outline"}
               size="sm"
@@ -699,7 +633,7 @@ export default function Reminders() {
                     onChange={(e) => setNewReminder({ ...newReminder, title: e.target.value })}
                   />
                   <div className="grid grid-cols-2 gap-2">
-                    <Button onClick={handleCreateReminder} className="w-full">
+                    <Button onClick={() => handleCreateReminder()} className="w-full">
                       Create
                     </Button>
                     <Button variant="outline" className="w-full">
@@ -948,8 +882,8 @@ export default function Reminders() {
                         <Textarea
                           id="reminder-description"
                           placeholder="Additional details or context..."
-                          value={newReminder.description}
-                          onChange={(e) => setNewReminder({ ...newReminder, description: e.target.value })}
+                          value={newReminder.description || ''}
+                          onChange={handleDescriptionChange}
                           rows={3}
                         />
                       </div>
@@ -957,8 +891,8 @@ export default function Reminders() {
                       <div className="space-y-2">
                         <Label>Space</Label>
                         <Select
-                          value={newReminder.space_id}
-                          onValueChange={(value) => setNewReminder({ ...newReminder, space_id: value })}
+                          value={newReminder.space_id || ''}
+                          onValueChange={handleSpaceIdChange}
                         >
                           <SelectTrigger className="h-12">
                             <SelectValue />
@@ -990,8 +924,8 @@ export default function Reminders() {
                         <Input
                           id="reminder-time"
                           type="datetime-local"
-                          value={newReminder.reminder_time}
-                          onChange={(e) => setNewReminder({ ...newReminder, reminder_time: e.target.value })}
+                          value={newReminder.due_date}
+                          onChange={(e) => setNewReminder({ ...newReminder, due_date: e.target.value })}
                           className="h-12"
                         />
                       </div>
@@ -1030,8 +964,8 @@ export default function Reminders() {
                         <div className="space-y-2">
                           <Label>Repeat Frequency</Label>
                           <Select
-                            value={newReminder.repeat_frequency}
-                            onValueChange={(value: RepeatFrequency) => setNewReminder({ ...newReminder, repeat_frequency: value })}
+                            value={newReminder.repeat_frequency || 'none'}
+                            onValueChange={handleRepeatFrequencyChange}
                           >
                             <SelectTrigger className="h-12">
                               <SelectValue />
@@ -1055,8 +989,8 @@ export default function Reminders() {
                         <Input
                           id="reminder-location"
                           placeholder="e.g., Home, Office, Grocery Store..."
-                          value={newReminder.location}
-                          onChange={(e) => setNewReminder({ ...newReminder, location: e.target.value })}
+                          value={newReminder.location ?? ''}
+                          onChange={(e) => setNewReminder({ ...newReminder, location: e.target.value || null })}
                           className="h-12"
                         />
                       </div>
@@ -1064,13 +998,13 @@ export default function Reminders() {
                       <div className="space-y-2">
                         <Label>Tags (optional)</Label>
                         <div className="flex flex-wrap gap-2 mb-2">
-                          {newReminder.tags.map((tag, index) => (
+                          {newReminder.tags?.map((tag: string, index: number) => (
                             <Badge key={index} variant="secondary" className="flex items-center gap-1 px-3 py-1">
                               #{tag}
                               <button
                                 onClick={() => setNewReminder(prev => ({
                                   ...prev,
-                                  tags: prev.tags.filter((_, i) => i !== index)
+                                  tags: prev.tags?.filter((_, i) => i !== index)
                                 }))}
                               >
                                 <X className="h-3 w-3" />
@@ -1085,10 +1019,10 @@ export default function Reminders() {
                               if (e.key === 'Enter' && e.currentTarget.value.trim()) {
                                 e.preventDefault()
                                 const newTag = e.currentTarget.value.trim()
-                                if (!newReminder.tags.includes(newTag)) {
+                                if (!newReminder.tags?.includes(newTag)) {
                                   setNewReminder(prev => ({
                                     ...prev,
-                                    tags: [...prev.tags, newTag]
+                                    tags: [...(prev.tags || []), newTag]
                                   }))
                                 }
                                 e.currentTarget.value = ''
@@ -1102,10 +1036,10 @@ export default function Reminders() {
                               const input = e.currentTarget.parentElement?.querySelector('input')
                               if (input?.value.trim()) {
                                 const newTag = input.value.trim()
-                                if (!newReminder.tags.includes(newTag)) {
+                                if (!newReminder.tags?.includes(newTag)) {
                                   setNewReminder(prev => ({
                                     ...prev,
-                                    tags: [...prev.tags, newTag]
+                                    tags: [...(prev.tags || []), newTag]
                                   }))
                                 }
                                 input.value = ''
@@ -1125,7 +1059,7 @@ export default function Reminders() {
                     Cancel
                   </Button>
                   <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-                    <Button onClick={handleCreateReminder} className="h-10 px-6">
+                    <Button onClick={() => handleCreateReminder()} className="h-10 px-6">
                       Create Reminder
                     </Button>
                   </motion.div>
@@ -1301,7 +1235,7 @@ export default function Reminders() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.2 }}
       >
-        {filteredReminders.length === 0 ? (
+        {reminders.length === 0 ? (
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
@@ -1365,11 +1299,11 @@ export default function Reminders() {
             )}
           >
             <AnimatePresence mode="popLayout">
-              {filteredReminders.map((reminder) => {
+              {filteredRemindersList.map((reminder) => {
                 const spaceDetails = getSpaceDetails(reminder.space_id)
                 const IconComponent = getIconComponent(spaceDetails.icon)
-                const PriorityIcon = getPriorityIcon(reminder.priority || 'medium')
-                const reminderDate = dayjs(reminder.reminder_time)
+                const PriorityIcon = getPriorityIcon(reminder.priority)
+                const reminderDate = dayjs(reminder.due_date)
                 const isOverdue = reminderDate.isBefore(dayjs()) && reminder.status === 'pending'
                 const isSelected = selectedReminders.includes(reminder.id)
                 
@@ -1500,7 +1434,7 @@ export default function Reminders() {
                               "font-medium",
                               isOverdue ? "text-red-600" : "text-muted-foreground"
                             )}>
-                              {formatReminderTime(reminder.reminder_time)}
+                              {formatReminderTime(reminder.due_date)}
                             </span>
                           </div>
                           
@@ -1574,10 +1508,10 @@ export default function Reminders() {
                   <Label>Due Date & Time</Label>
                   <Input
                     type="datetime-local"
-                    value={editingReminder.reminder_time ? dayjs(editingReminder.reminder_time).format('YYYY-MM-DDTHH:mm') : ''}
+                    value={editingReminder.due_date ? dayjs(editingReminder.due_date).format('YYYY-MM-DDTHH:mm') : ''}
                     onChange={(e) => setEditingReminder({ 
                       ...editingReminder, 
-                      reminder_time: e.target.value ? dayjs(e.target.value).toISOString() : ''
+                      due_date: e.target.value ? dayjs(e.target.value).toISOString() : ''
                     })}
                     className="h-12"
                   />
@@ -1619,7 +1553,7 @@ export default function Reminders() {
                     handleUpdateReminder(editingReminder.id, {
                       title: editingReminder.title,
                       description: editingReminder.description,
-                      reminder_time: editingReminder.reminder_time,
+                      due_date: editingReminder.due_date,
                       priority: editingReminder.priority,
                       location: editingReminder.location
                     })

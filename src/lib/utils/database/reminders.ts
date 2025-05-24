@@ -1,7 +1,7 @@
 // lib/utils/database/reminders.ts
-import { createClient } from '@/lib/supabaseBrowserClient'
-import type { Database } from '@/lib/supabaseClient'
-import type { RealtimePostgresChangesPayload } from '@supabase/supabase-js'
+import { createClient } from '@/lib/supabase/client'
+import { Database } from '@/lib/types/database'
+import { RealtimePostgresChangesPayload } from '@supabase/supabase-js'
 
 type Reminder = Database['public']['Tables']['reminders']['Row']
 
@@ -223,25 +223,35 @@ export async function searchReminders(userId: string, query: string): Promise<Re
 }
 
 // Subscribe to real-time changes for reminders
-export function subscribeToReminders(
-  userId: string,
+export const subscribeToReminders = (
   callback: (payload: RealtimePostgresChangesPayload<Reminder>) => void
-) {
+) => {
   const supabase = createClient()
-  
-  const subscription = supabase
+  return supabase
     .channel('reminders')
     .on(
       'postgres_changes',
       {
         event: '*',
         schema: 'public',
-        table: 'reminders',
-        filter: `user_id=eq.${userId}`
+        table: 'reminders'
       },
       callback
     )
     .subscribe()
+}
+
+// Get completed reminders
+export async function getCompletedReminders(userId: string) {
+  const supabase = createClient()
   
-  return subscription
+  const { data: reminders, error } = await supabase
+    .from('reminders')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('status', 'completed')
+    .order('completed_at', { ascending: false })
+  
+  if (error) throw error
+  return reminders || []
 }

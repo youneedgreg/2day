@@ -17,7 +17,15 @@ type NoteMetadata = {
   font_family?: string;
 }
 
-export type Database = {
+export type Json =
+  | string
+  | number
+  | boolean
+  | null
+  | { [key: string]: Json | undefined }
+  | Json[]
+
+export interface Database {
   public: {
     Tables: {
       profiles: {
@@ -206,48 +214,48 @@ export type Database = {
           user_id: string
           title: string
           description: string | null
-          reminder_time: string
-          repeat_frequency: string | null
-          status: 'pending' | 'completed' | 'dismissed'
-          priority: 'low' | 'medium' | 'high' | null
+          due_date: string
+          status: string
+          completed: boolean
           space_id: string | null
-          completed_at: string | null
-          is_recurring: boolean
-          reminder_metadata: ReminderMetadata | null
           created_at: string
-          updated_at: string
+          updated_at: string | null
+          priority: string
+          repeat_frequency: string
+          location: string | null
+          tags: string[] | null
         }
         Insert: {
           id?: string
           user_id: string
           title: string
           description?: string | null
-          reminder_time: string
-          repeat_frequency?: string | null
-          status?: 'pending' | 'completed' | 'dismissed'
-          priority?: 'low' | 'medium' | 'high' | null
+          due_date: string
+          status?: string
+          completed?: boolean
           space_id?: string | null
-          completed_at?: string | null
-          is_recurring?: boolean
-          reminder_metadata?: ReminderMetadata | null
           created_at?: string
-          updated_at?: string
+          updated_at?: string | null
+          priority?: string
+          repeat_frequency?: string
+          location?: string | null
+          tags?: string[] | null
         }
         Update: {
           id?: string
           user_id?: string
           title?: string
           description?: string | null
-          reminder_time?: string
-          repeat_frequency?: string | null
-          status?: 'pending' | 'completed' | 'dismissed'
-          priority?: 'low' | 'medium' | 'high' | null
+          due_date?: string
+          status?: string
+          completed?: boolean
           space_id?: string | null
-          completed_at?: string | null
-          is_recurring?: boolean
-          reminder_metadata?: ReminderMetadata | null
           created_at?: string
-          updated_at?: string
+          updated_at?: string | null
+          priority?: string
+          repeat_frequency?: string
+          location?: string | null
+          tags?: string[] | null
         }
       }
       reminder_spaces: {
