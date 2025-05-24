@@ -8,7 +8,7 @@ type Reminder = Database['public']['Tables']['reminders']['Row']
 export interface CreateReminderInput {
   title: string
   description?: string
-  reminder_time: string
+  due_date: string
   repeat_frequency?: 'none' | 'daily' | 'weekly' | 'monthly'
   priority?: 'low' | 'medium' | 'high'
   space_id?: string
@@ -17,14 +17,14 @@ export interface CreateReminderInput {
 export interface UpdateReminderInput {
   title?: string
   description?: string
-  reminder_time?: string
+  due_date?: string
   repeat_frequency?: 'none' | 'daily' | 'weekly' | 'monthly'
   status?: 'pending' | 'completed' | 'dismissed'
   priority?: 'low' | 'medium' | 'high'
   space_id?: string
 }
 
-// FIXED: Get all reminders for a user (removed due_date ordering)
+// Get all reminders for a user
 export async function getReminders(userId: string): Promise<Reminder[]> {
   const supabase = createClient()
   
@@ -32,7 +32,7 @@ export async function getReminders(userId: string): Promise<Reminder[]> {
     .from('reminders')
     .select('*')
     .eq('user_id', userId)
-    .order('reminder_time', { ascending: true }) // Use reminder_time instead of due_date
+    .order('due_date', { ascending: true })
   
   if (error) throw error
   return reminders || []
@@ -163,13 +163,13 @@ export async function getRemindersBySpace(spaceId: string) {
     .from('reminders')
     .select('*')
     .eq('space_id', spaceId)
-    .order('reminder_time', { ascending: true }) // Fixed: use reminder_time instead of due_date
+    .order('due_date', { ascending: true })
   
   if (error) throw error
   return reminders || []
 }
 
-// FIXED: Get upcoming reminders (next 7 days) - using reminder_time and status
+// FIXED: Get upcoming reminders (next 7 days) - using due_date and status
 export async function getUpcomingReminders(userId: string) {
   const supabase = createClient()
   
@@ -178,14 +178,14 @@ export async function getUpcomingReminders(userId: string) {
     .select('*')
     .eq('user_id', userId)
     .eq('status', 'pending') // Use status instead of completed
-    .gte('reminder_time', new Date().toISOString()) // Use reminder_time instead of due_date
-    .order('reminder_time', { ascending: true })
+    .gte('due_date', new Date().toISOString()) // Use due_date instead of reminder_time
+    .order('due_date', { ascending: true })
   
   if (error) throw error
   return reminders || []
 }
 
-// FIXED: Get overdue reminders - using reminder_time and status
+// FIXED: Get overdue reminders - using due_date and status
 export async function getOverdueReminders(userId: string) {
   const supabase = createClient()
   
@@ -194,8 +194,8 @@ export async function getOverdueReminders(userId: string) {
     .select('*')
     .eq('user_id', userId)
     .eq('status', 'pending') // Use status instead of completed
-    .lt('reminder_time', new Date().toISOString()) // Use reminder_time instead of due_date
-    .order('reminder_time', { ascending: true })
+    .lt('due_date', new Date().toISOString()) // Use due_date instead of reminder_time
+    .order('due_date', { ascending: true })
   
   if (error) throw error
   return reminders || []
@@ -212,7 +212,7 @@ export async function searchReminders(userId: string, query: string): Promise<Re
       .eq('user_id', userId)
       .neq('status', 'dismissed')
       .or(`title.ilike.%${query}%,description.ilike.%${query}%`)
-      .order('reminder_time', { ascending: true })
+      .order('due_date', { ascending: true })
 
     if (error) throw error
     return reminders || []

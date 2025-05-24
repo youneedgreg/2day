@@ -215,15 +215,18 @@ export interface Database {
           title: string
           description: string | null
           due_date: string
-          status: string
+          status: 'pending' | 'completed'
           completed: boolean
           space_id: string | null
           created_at: string
           updated_at: string | null
-          priority: string
-          repeat_frequency: string
+          priority: string | null
+          repeat_frequency: string | null
           location: string | null
           tags: string[] | null
+          completed_at: string | null
+          is_recurring: boolean
+          reminder_metadata: ReminderMetadata | null
         }
         Insert: {
           id?: string
@@ -231,15 +234,18 @@ export interface Database {
           title: string
           description?: string | null
           due_date: string
-          status?: string
+          status?: 'pending' | 'completed'
           completed?: boolean
           space_id?: string | null
           created_at?: string
           updated_at?: string | null
-          priority?: string
-          repeat_frequency?: string
+          priority?: string | null
+          repeat_frequency?: string | null
           location?: string | null
           tags?: string[] | null
+          completed_at?: string | null
+          is_recurring?: boolean
+          reminder_metadata?: ReminderMetadata | null
         }
         Update: {
           id?: string
@@ -247,15 +253,18 @@ export interface Database {
           title?: string
           description?: string | null
           due_date?: string
-          status?: string
+          status?: 'pending' | 'completed'
           completed?: boolean
           space_id?: string | null
           created_at?: string
           updated_at?: string | null
-          priority?: string
-          repeat_frequency?: string
+          priority?: string | null
+          repeat_frequency?: string | null
           location?: string | null
           tags?: string[] | null
+          completed_at?: string | null
+          is_recurring?: boolean
+          reminder_metadata?: ReminderMetadata | null
         }
       }
       reminder_spaces: {

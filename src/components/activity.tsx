@@ -168,7 +168,7 @@ export default function ActivityStream() {
     
     // Process reminders
     reminderList.forEach(reminder => {
-      const date = dayjs(reminder.reminder_time)
+      const date = dayjs(reminder.due_date)
       
       let urgency: "overdue" | "today" | "tomorrow" | "upcoming" | "future" = "upcoming"
       if (date.isToday()) urgency = "today"
@@ -185,7 +185,7 @@ export default function ActivityStream() {
         urgency,
         daysUntil: date.diff(today, 'day'),
         description: reminder.description || undefined,
-        priority: reminder.priority || undefined
+        priority: reminder.priority || 'medium'
       })
     })
     
