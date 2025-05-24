@@ -1,8 +1,11 @@
-import { createClient } from '@/lib/supabaseBrowserClient'
+import { createBrowserClient } from '@supabase/ssr'
 import type { Database } from '@/lib/types/database'
+import type { RealtimeChannel, RealtimePostgresChangesPayload } from '@supabase/supabase-js'
 
 // Create a client-side Supabase client
-export const supabase = createClient()
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL as string
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY as string
+export const supabase = createBrowserClient<Database>(supabaseUrl, supabaseAnonKey)
 
 // Profile operations
 export const getProfile = async (userId: string) => {
@@ -181,12 +184,8 @@ export const createActivity = async (activity: Database['public']['Tables']['act
 // Real-time subscriptions
 export const subscribeToChanges = <T extends keyof Database['public']['Tables']>(
   table: T,
-  callback: (payload: {
-    event: 'INSERT' | 'UPDATE' | 'DELETE'
-    new: Database['public']['Tables'][T]['Row'] | null
-    old: Database['public']['Tables'][T]['Row'] | null
-  }) => void
-) => {
+  callback: (payload: RealtimePostgresChangesPayload<Database['public']['Tables'][T]['Row']>) => void
+): RealtimeChannel => {
   return supabase
     .channel(`${table}-changes`)
     .on(
