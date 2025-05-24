@@ -19,7 +19,7 @@ export interface UpdateReminderInput {
   description?: string
   due_date?: string
   repeat_frequency?: 'none' | 'daily' | 'weekly' | 'monthly'
-  status?: 'pending' | 'completed' | 'dismissed'
+  status?: 'pending' | 'completed'
   priority?: 'low' | 'medium' | 'high'
   space_id?: string
 }
@@ -92,14 +92,14 @@ export async function completeReminder(reminderId: string) {
   return data
 }
 
-// ADDED: Dismiss a reminder (MISSING FUNCTION)
+// Update dismissReminder function to use 'completed' status instead of 'dismissed'
 export async function dismissReminder(reminderId: string) {
   const supabase = createClient()
   
   const { data, error } = await supabase
     .from('reminders')
     .update({ 
-      status: 'dismissed',
+      status: 'completed',
       updated_at: new Date().toISOString()
     })
     .eq('id', reminderId)
