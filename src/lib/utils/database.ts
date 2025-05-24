@@ -154,31 +154,6 @@ export const updateNote = async (noteId: string, updates: Database['public']['Ta
   return data
 }
 
-// Calendar events operations
-export const getCalendarEvents = async (userId: string, startDate: string, endDate: string) => {
-  const { data, error } = await supabase
-    .from('calendar_events')
-    .select('*')
-    .eq('user_id', userId)
-    .gte('start_time', startDate)
-    .lte('end_time', endDate)
-    .order('start_time', { ascending: true })
-  
-  if (error) throw error
-  return data
-}
-
-export const createCalendarEvent = async (event: Database['public']['Tables']['calendar_events']['Insert']) => {
-  const { data, error } = await supabase
-    .from('calendar_events')
-    .insert(event)
-    .select()
-    .single()
-  
-  if (error) throw error
-  return data
-}
-
 // Activity operations
 export const getActivities = async (userId: string) => {
   const { data, error } = await supabase
