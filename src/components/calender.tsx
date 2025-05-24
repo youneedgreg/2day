@@ -254,7 +254,7 @@ export default function Calendar() {
       
       // Filter reminders for this specific date
       const dayReminders = reminders.filter(reminder => {
-        const reminderDate = dayjs(reminder.reminder_time)
+        const reminderDate = dayjs(reminder.due_date)
         return isSameDay(reminderDate, date)
       })
       
