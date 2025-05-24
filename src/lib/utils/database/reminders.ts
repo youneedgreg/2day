@@ -129,7 +129,7 @@ export async function createReminder(reminder: Omit<Reminder, 'id' | 'created_at
 }
 
 // Update a reminder
-export async function updateReminder(id: string, updates: Partial<Reminder>) {
+export async function updateReminder(id: string, updates: UpdateReminderInput) {
   const supabase = createClient()
   
   const { data: reminder, error } = await supabase

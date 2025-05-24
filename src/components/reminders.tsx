@@ -28,10 +28,12 @@ import { Textarea } from "@/components/ui/textarea"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { useAuth } from '@/hooks/useAuth'
 import { 
-  updateReminder,
-  completeReminder,
-  dismissReminder,
-  subscribeToReminders
+  getReminders, 
+  createReminder, 
+  updateReminder, 
+  deleteReminder,
+  subscribeToReminders,
+  UpdateReminderInput
 } from '@/lib/utils/database/reminders'
 import { 
   createReminderSpace, 
@@ -58,8 +60,8 @@ dayjs.extend(customParseFormat)
 // Define types
 type Priority = 'low' | 'medium' | 'high'
 type RepeatFrequency = "none" | "daily" | "weekly" | "monthly"
-type ReminderStatus = "pending" | "completed" | "dismissed"
 type Reminder = Database['public']['Tables']['reminders']['Row']
+type ReminderMetadata = Database['public']['Tables']['reminders']['Row']['reminder_metadata']
 type FilterType = 'all' | 'high-priority' | 'today' | 'this-week' | 'overdue' | 'completed' | 'recurring'
 type ViewMode = 'card' | 'list' | 'compact'
 
@@ -145,22 +147,6 @@ const getStatusColor = (status: string, isOverdue: boolean) => {
   if (status === 'completed') return 'border-green-500 bg-gradient-to-br from-green-50 to-green-100 dark:from-green-950/20 dark:to-green-900/30'
   if (isOverdue) return 'border-red-500 bg-gradient-to-br from-red-50 to-red-100 dark:from-red-950/20 dark:to-red-900/30'
   return 'border-muted bg-gradient-to-br from-card to-muted/30'
-}
-
-// Update the CreateReminderInput type
-// type CreateReminderInput = Omit<Reminder, 'id' | 'created_at' | 'updated_at'>
-
-// Update the UpdateReminderInput type
-type UpdateReminderInput = {
-  title?: string;
-  description?: string;
-  due_date?: string;
-  repeat_frequency?: RepeatFrequency;
-  priority?: Priority;
-  space_id?: string;
-  location?: string;
-  tags?: string[];
-  status?: ReminderStatus;
 }
 
 export default function Reminders() {
@@ -297,13 +283,14 @@ export default function Reminders() {
         r.id === reminderId ? { ...r, ...updates } : r
       ))
       
-      const updateData = {
-        ...updates,
+      const updateData: UpdateReminderInput = {
+        title: updates.title,
         description: updates.description || undefined,
-        repeat_frequency: updates.repeat_frequency,
-        priority: updates.priority,
-        space_id: updates.space_id || undefined,
-        status: updates.status
+        due_date: updates.due_date,
+        status: updates.status,
+        priority: updates.priority as Priority || undefined,
+        repeat_frequency: updates.repeat_frequency as RepeatFrequency || undefined,
+        space_id: updates.space_id || undefined
       }
       
       await updateReminder(reminderId, updateData)
@@ -322,7 +309,7 @@ export default function Reminders() {
         r.id === reminderId ? { ...r, status: 'completed' as const } : r
       ))
       
-      await completeReminder(reminderId)
+      await deleteReminder(reminderId)
       toast.success('Reminder completed')
     } catch (error) {
       console.error('Error completing reminder:', error)
@@ -336,7 +323,7 @@ export default function Reminders() {
       // Optimistic update
       setReminders(prev => prev.filter(r => r.id !== reminderId))
       
-      await dismissReminder(reminderId)
+      await deleteReminder(reminderId)
       toast.success('Reminder deleted')
     } catch (error) {
       console.error('Error deleting reminder:', error)
@@ -379,17 +366,15 @@ export default function Reminders() {
   }
 
   const handleBulkAction = async (action: 'complete' | 'delete' | 'archive') => {
-    if (selectedReminders.length === 0) return
-
     try {
       await Promise.all(selectedReminders.map(reminderId => {
         switch (action) {
           case 'complete':
-            return completeReminder(reminderId)
+            return deleteReminder(reminderId)
           case 'delete':
-            return dismissReminder(reminderId)
+            return deleteReminder(reminderId)
           case 'archive':
-            return updateReminder(reminderId, { status: 'completed' } as UpdateReminderInput)
+            return updateReminder(reminderId, { status: 'completed' })
         }
       }))
 
