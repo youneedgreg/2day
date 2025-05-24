@@ -1,5 +1,5 @@
 import { createClient } from '@/lib/supabaseBrowserClient'
-import type { Database } from '@/lib/supabaseClient'
+import type { Database } from '@/lib/types/database'
 
 // Create a client-side Supabase client
 export const supabase = createClient()
