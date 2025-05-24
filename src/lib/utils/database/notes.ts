@@ -65,11 +65,14 @@ export async function getNotes(userId: string): Promise<Note[]> {
   return notes || []
 }
 
-// ADDED: Subscribe to real-time notes changes (MISSING FUNCTION)
-export function subscribeToNotesChanges(userId: string, callback: (notes: Note[]) => void) {
+// Update the subscription function
+export function subscribeToNotesChanges(
+  userId: string,
+  callback: (payload: RealtimePostgresChangesPayload<Note>) => void
+) {
   const supabase = createClient()
   
-  const channel = supabase
+  const subscription = supabase
     .channel('notes-changes')
     .on(
       'postgres_changes',
@@ -79,21 +82,12 @@ export function subscribeToNotesChanges(userId: string, callback: (notes: Note[]
         table: 'notes',
         filter: `user_id=eq.${userId}`
       },
-      async () => {
-        // Reload notes when changes occur
-        try {
-          const notes = await getNotes(userId)
-          callback(notes)
-        } catch (error) {
-          console.error('Error reloading notes:', error)
-        }
-      }
+      callback
     )
     .subscribe()
-
-  // Return unsubscribe function
+  
   return () => {
-    supabase.removeChannel(channel)
+    supabase.removeChannel(subscription)
   }
 }
 

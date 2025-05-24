@@ -153,6 +153,14 @@ export type Database = {
       }
       notes: {
         Row: {
+          color: string
+          tags: never[]
+          note_type: string
+          is_pinned: boolean
+          is_archived: boolean
+          word_count: number
+          character_count: number
+          metadata: unknown
           id: string
           title: string
           content: string

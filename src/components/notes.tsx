@@ -35,11 +35,9 @@ import {
   createNote, 
   updateNote, 
   deleteNote,
-  searchNotes,
-  getNotesByTag,
   getUserTags,
   duplicateNote,
-  subscribeToNotesChanges 
+  subscribeToNotesChanges
 } from '@/lib/utils/database/notes'
 import { Database } from '@/lib/types/database'
 import dayjs from 'dayjs'
@@ -49,17 +47,8 @@ import { toast } from 'sonner'
 // Initialize dayjs plugins
 dayjs.extend(relativeTime)
 
-type NoteMetadata = {
-  is_favorite?: boolean;
-  is_pinned?: boolean;
-  is_archived?: boolean;
-  font_family?: string;
-}
-
 type Note = Database['public']['Tables']['notes']['Row']
-type ExtendedNote = Note & {
-  metadata?: NoteMetadata;
-}
+type NoteType = 'text' | 'rich_text' | 'drawing' | 'checklist'
 
 // Type for real-time subscription payload
 type RealtimePayload = {
@@ -74,6 +63,21 @@ type ChecklistItem = {
   id: string;
   text: string;
   completed: boolean;
+}
+
+// Update the Note type to include metadata
+type NoteMetadata = {
+  is_favorite?: boolean;
+  is_pinned?: boolean;
+  is_archived?: boolean;
+  font_family?: string;
+  last_edited_by?: string;
+  version?: number;
+  custom_data?: Record<string, unknown>;
+}
+
+type ExtendedNote = Note & {
+  metadata?: NoteMetadata;
 }
 
 // Color options for notes with enhanced gradients
@@ -546,13 +550,11 @@ const ChecklistEditor = ({
   )
 }
 
-// Add NoteType definition
-type NoteType = 'text' | 'rich_text' | 'drawing' | 'checklist'
-
 // Main Notes Component
 export default function Notes() {
   const { user } = useAuth()
   const [notes, setNotes] = useState<ExtendedNote[]>([])
+  const [filteredNotes, setFilteredNotes] = useState<ExtendedNote[]>([])
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedTag, setSelectedTag] = useState<string | null>(null)
@@ -587,28 +589,82 @@ export default function Notes() {
   const [isPreviewMode, setIsPreviewMode] = useState(false)
   const [canUndo, setCanUndo] = useState(false)
   const [canRedo, setCanRedo] = useState(false)
+  const [isUploading, setIsUploading] = useState(false)
+
+  // Add this near the top of the component, after the state declarations
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
+
+  // Move filterNotes function before its usage
+  const filterNotes = (notes: ExtendedNote[], searchQuery: string, selectedTag: string | null): ExtendedNote[] => {
+    return notes.filter(note => {
+      const matchesSearch = searchQuery === '' || 
+        note.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        note.content?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        note.tags?.some(tag => tag.toLowerCase().includes(searchQuery.toLowerCase()))
+      
+      const matchesTag = !selectedTag || note.tags?.includes(selectedTag)
+      
+      return matchesSearch && matchesTag
+    })
+  }
+
+  // Update the handleUpdateNote function
+  const handleUpdateNote = async (noteId: string, updates: Partial<ExtendedNote>) => {
+    try {
+      // Optimistic update
+      setNotes(prev => prev.map(n => 
+        n.id === noteId ? { ...n, ...updates, note_type: updates.note_type as NoteType ?? n.note_type } : n
+      ))
+      setFilteredNotes(prev => prev.map(n => 
+        n.id === noteId ? { ...n, ...updates, note_type: updates.note_type as NoteType ?? n.note_type } : n
+      ))
+
+      // Create clean updates object with correct types
+      const cleanUpdates: Partial<Database['public']['Tables']['notes']['Update']> = {}
+
+      if (typeof updates.title === 'string') cleanUpdates.title = updates.title
+      if (typeof updates.content === 'string') cleanUpdates.content = updates.content
+      if (typeof updates.color === 'string') cleanUpdates.color = updates.color
+      if (Array.isArray(updates.tags)) cleanUpdates.tags = updates.tags
+      if (typeof updates.note_type === 'string') cleanUpdates.note_type = updates.note_type as NoteType
+      if (updates.metadata !== undefined && updates.metadata !== null) cleanUpdates.metadata = updates.metadata
+      if (typeof updates.is_pinned === 'boolean') cleanUpdates.is_pinned = updates.is_pinned
+      if (typeof updates.is_archived === 'boolean') cleanUpdates.is_archived = updates.is_archived
+      if (typeof updates.word_count === 'number') cleanUpdates.word_count = updates.word_count
+      if (typeof updates.character_count === 'number') cleanUpdates.character_count = updates.character_count
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await updateNote(noteId, cleanUpdates as any)
+      toast.success('Note updated successfully')
+    } catch (error) {
+      console.error('Error updating note:', error)
+      toast.error('Failed to update note')
+      fetchNotes() // Revert on error
+    }
+  }
+
+  // Update the search effect
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchQuery(searchQuery)
+    }, 300)
+
+    return () => clearTimeout(timer)
+  }, [searchQuery])
+
+  useEffect(() => {
+    if (notes) {
+      const filtered = filterNotes(notes, debouncedSearchQuery, selectedTag)
+      setFilteredNotes(filtered)
+    }
+  }, [notes, debouncedSearchQuery, selectedTag])
 
   const fetchNotes = useCallback(async () => {
     if (!user) return
     try {
-      const fetchedNotes = await getNotes(user.id)
-      setNotes(fetchedNotes.map(note => ({
-        ...note,
-        updated_at: note.updated_at ?? note.created_at ?? '',
-        color: note.color ?? '#ffffff',
-        tags: note.tags ?? [],
-        note_type: note.note_type ?? 'text',
-        is_pinned: note.is_pinned ?? false,
-        is_archived: note.is_archived ?? false,
-        word_count: note.word_count ?? 0,
-        character_count: note.character_count ?? 0,
-        metadata: {
-          is_favorite: note.metadata?.is_favorite ?? false,
-          is_pinned: note.is_pinned ?? false,
-          is_archived: note.is_archived ?? false,
-          font_family: note.metadata?.font_family ?? 'font-sans',
-        }
-      })))
+      const notes = await getNotes(user.id)
+      setNotes(notes as ExtendedNote[])
+      setFilteredNotes(notes as ExtendedNote[])
     } catch (error) {
       console.error('Error fetching notes:', error)
     }
@@ -647,75 +703,21 @@ export default function Notes() {
     }
   }, [fetchNotes, fetchUserTags])
 
-  const filterNotes = useCallback(async (type: 'tag' | 'search', value: string) => {
-    if (!user) return
-    try {
-      let filteredNotes: ExtendedNote[] = []
-      if (type === 'tag') {
-        const notes = await getNotesByTag(value, user.id)
-        filteredNotes = notes.map(note => ({
-          ...note,
-          updated_at: note.updated_at ?? note.created_at ?? '',
-          color: note.color ?? '#ffffff',
-          tags: note.tags ?? [],
-          note_type: note.note_type ?? 'text',
-          is_pinned: note.is_pinned ?? false,
-          is_archived: note.is_archived ?? false,
-          word_count: note.word_count ?? 0,
-          character_count: note.character_count ?? 0,
-          metadata: {
-            is_favorite: note.metadata?.is_favorite ?? false,
-            is_pinned: note.is_pinned ?? false,
-            is_archived: note.is_archived ?? false,
-            font_family: note.metadata?.font_family ?? 'font-sans',
-          }
-        }))
-      } else {
-        const notes = await searchNotes(value, user.id)
-        filteredNotes = notes.map(note => ({
-          ...note,
-          updated_at: note.updated_at ?? note.created_at ?? '',
-          color: note.color ?? '#ffffff',
-          tags: note.tags ?? [],
-          note_type: note.note_type ?? 'text',
-          is_pinned: note.is_pinned ?? false,
-          is_archived: note.is_archived ?? false,
-          word_count: note.word_count ?? 0,
-          character_count: note.character_count ?? 0,
-          metadata: {
-            is_favorite: note.metadata?.is_favorite ?? false,
-            is_pinned: note.is_pinned ?? false,
-            is_archived: note.is_archived ?? false,
-            font_family: note.metadata?.font_family ?? 'font-sans',
-          }
-        }))
-      }
-      setNotes(filteredNotes)
-    } catch (error) {
-      console.error('Error filtering notes:', error)
-    }
-  }, [user])
-
   useEffect(() => {
     if (!user) return
 
     initializeData()
 
     // Subscribe to real-time updates
-    const unsubscribe = subscribeToNotesChanges(user.id, (payload) => {
+    const subscription = subscribeToNotesChanges(user.id, (payload) => {
       console.log('Real-time note update:', payload)
       handleRealTimeUpdate(payload)
     })
 
     return () => {
-      if (typeof unsubscribe === 'function') unsubscribe()
+      subscription()
     }
   }, [user, initializeData, handleRealTimeUpdate])
-
-  // Filter notes when search or filters change
-  useEffect(() => {
-    filterNotes('search', searchQuery)
-  }, [searchQuery, filterNotes])
 
   const handleCreateNote = async () => {
     if (!user) return
@@ -726,70 +728,32 @@ export default function Notes() {
         user_id: user.id,
         color: '#ffffff',
         tags: [],
-        note_type: 'text',
-        metadata: {
-          is_favorite: false,
-          is_pinned: false,
-          is_archived: false,
-          font_family: 'font-sans'
-        },
+        note_type: 'text' as NoteType,
+        metadata: {},
         is_pinned: false,
         is_archived: false,
         word_count: 0,
         character_count: 0
-      } as Omit<Note, 'id' | 'created_at' | 'updated_at'>)
-      setNotes(prev => [
-        {
-          ...newNote,
-          updated_at: newNote.updated_at ?? newNote.created_at ?? '',
-          color: newNote.color ?? '#ffffff',
-          tags: newNote.tags ?? [],
-          note_type: newNote.note_type ?? 'text',
-          is_pinned: newNote.is_pinned ?? false,
-          is_archived: newNote.is_archived ?? false,
-          word_count: newNote.word_count ?? 0,
-          character_count: newNote.character_count ?? 0,
-          metadata: {
-            is_favorite: newNote.metadata?.is_favorite ?? false,
-            is_pinned: newNote.is_pinned ?? false,
-            is_archived: newNote.is_archived ?? false,
-            font_family: newNote.metadata?.font_family ?? 'font-sans',
-          }
-        },
-        ...prev
-      ])
+      })
+      const extendedNote: ExtendedNote = {
+        ...newNote,
+        note_type: (newNote.note_type || 'text') as 'text' | 'rich_text' | 'drawing' | 'checklist' | null,
+        metadata: newNote.metadata || {},
+        updated_at: newNote.updated_at || newNote.created_at,
+        color: newNote.color || '#ffffff',
+        tags: newNote.tags || [],
+        content: newNote.content || '',
+        is_pinned: newNote.is_pinned,
+        is_archived: newNote.is_archived,
+        word_count: newNote.word_count,
+        character_count: newNote.character_count
+      }
+      setNotes(prev => [extendedNote, ...prev])
+      setFilteredNotes(prev => [extendedNote, ...prev])
     } catch (error) {
       console.error('Error creating note:', error)
     }
   }
-
-  const handleUpdateNote = async (noteId: string, updates: Partial<ExtendedNote>) => {
-    try {
-      // Optimistic update
-      setNotes(prev => prev.map(n => 
-        n.id === noteId ? { ...n, ...updates } : n
-      ));
-      
-      const { metadata, content, color, tags, note_type, ...restUpdates } = updates;
-      
-      // Create a clean update object with only defined values
-      const cleanUpdates = {
-        ...restUpdates,
-        content: content ?? undefined,
-        color: color ?? undefined,
-        tags: tags ?? undefined,
-        note_type: note_type ?? undefined,
-        metadata: metadata ? { ...metadata } : undefined
-      };
-      
-      await updateNote(noteId, cleanUpdates);
-      toast.success('Note updated successfully');
-    } catch (error) {
-      console.error('Error updating note:', error);
-      toast.error('Failed to update note');
-      fetchNotes(); // Revert on error
-    }
-  };
 
   const handleDeleteNote = async (noteId: string) => {
     try {
@@ -808,26 +772,9 @@ export default function Notes() {
   const handleDuplicateNote = async (noteId: string) => {
     try {
       const duplicatedNote = await duplicateNote(noteId)
-      setNotes(prev => [
-        {
-          ...duplicatedNote,
-          updated_at: duplicatedNote.updated_at ?? duplicatedNote.created_at ?? '',
-          color: duplicatedNote.color ?? '#ffffff',
-          tags: duplicatedNote.tags ?? [],
-          note_type: duplicatedNote.note_type ?? 'text',
-          is_pinned: duplicatedNote.is_pinned ?? false,
-          is_archived: duplicatedNote.is_archived ?? false,
-          word_count: duplicatedNote.word_count ?? 0,
-          character_count: duplicatedNote.character_count ?? 0,
-          metadata: {
-            is_favorite: duplicatedNote.metadata?.is_favorite ?? false,
-            is_pinned: duplicatedNote.is_pinned ?? false,
-            is_archived: duplicatedNote.is_archived ?? false,
-            font_family: duplicatedNote.metadata?.font_family ?? 'font-sans',
-          }
-        },
-        ...prev
-      ])
+      const extendedNote = duplicatedNote as ExtendedNote
+      setNotes(prev => [extendedNote, ...prev])
+      setFilteredNotes(prev => [extendedNote, ...prev])
     } catch (error) {
       console.error('Error duplicating note:', error)
     }
@@ -929,7 +876,7 @@ export default function Notes() {
   }
 
   const exportNotes = () => {
-    const dataStr = JSON.stringify(notes, null, 2)
+    const dataStr = JSON.stringify(filteredNotes, null, 2)
     const dataBlob = new Blob([dataStr], { type: 'application/json' })
     const url = URL.createObjectURL(dataBlob)
     const link = document.createElement('a')
@@ -1074,6 +1021,7 @@ export default function Notes() {
   const handleUpload = async (file: File) => {
     if (!user) return
     try {
+      setIsUploading(true)
       const content = await file.text()
       const newNote = await createNote({
         title: file.name,
@@ -1081,40 +1029,20 @@ export default function Notes() {
         user_id: user.id,
         color: '#ffffff',
         tags: [],
-        note_type: 'text',
-        metadata: {
-          is_favorite: false,
-          is_pinned: false,
-          is_archived: false,
-          font_family: 'font-sans'
-        },
-        is_pinned: false,
+        note_type: 'text' as const,
+        metadata: {},
         is_archived: false,
+        is_pinned: false,
         word_count: content.split(/\s+/).length,
         character_count: content.length
-      } as Omit<Note, 'id' | 'created_at' | 'updated_at'>)
-      setNotes(prev => [
-        {
-          ...newNote,
-          updated_at: newNote.updated_at ?? newNote.created_at ?? '',
-          color: newNote.color ?? '#ffffff',
-          tags: newNote.tags ?? [],
-          note_type: newNote.note_type ?? 'text',
-          is_pinned: newNote.is_pinned ?? false,
-          is_archived: newNote.is_archived ?? false,
-          word_count: newNote.word_count ?? 0,
-          character_count: newNote.character_count ?? 0,
-          metadata: {
-            is_favorite: newNote.metadata?.is_favorite ?? false,
-            is_pinned: newNote.is_pinned ?? false,
-            is_archived: newNote.is_archived ?? false,
-            font_family: newNote.metadata?.font_family ?? 'font-sans',
-          }
-        },
-        ...prev
-      ])
+      })
+      const extendedNote = newNote as ExtendedNote
+      setNotes(prev => [extendedNote, ...prev])
+      setFilteredNotes(prev => [extendedNote, ...prev])
     } catch (error) {
       console.error('Error uploading file:', error)
+    } finally {
+      setIsUploading(false)
     }
   }
 

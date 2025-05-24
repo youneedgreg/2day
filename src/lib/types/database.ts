@@ -11,6 +11,10 @@ type NoteMetadata = {
   last_edited_by?: string;
   version?: number;
   custom_data?: Record<string, unknown>;
+  is_favorite?: boolean;
+  is_pinned?: boolean;
+  is_archived?: boolean;
+  font_family?: string;
 }
 
 export type Database = {
