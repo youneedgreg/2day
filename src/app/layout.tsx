@@ -3,6 +3,7 @@ import { Inter, Roboto_Mono } from "next/font/google";
 import "./globals.css";
 import { CustomToastProvider } from "@/components/ui/custom-toast"
 import { Toaster } from 'sonner'
+import { Analytics } from "@vercel/analytics/next"
 
 const geistSans = Inter({
   variable: "--font-geist-sans",
@@ -33,6 +34,7 @@ export default function RootLayout({
         {children}
         <Toaster position="top-right" />
         </CustomToastProvider>
+        <Analytics />
       </body>
     </html>
   );
