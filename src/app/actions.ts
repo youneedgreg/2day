@@ -9,7 +9,7 @@ type LoginCredentials = {
 }
 
 export async function login({ email, password }: LoginCredentials) {
-  const supabase = await createServerSupabaseClient()
+  const supabase = createServerSupabaseClient()
 
   const { error } = await supabase.auth.signInWithPassword({
     email,
@@ -24,7 +24,7 @@ export async function login({ email, password }: LoginCredentials) {
 }
 
 export async function signup({ email, password }: LoginCredentials) {
-  const supabase = await createServerSupabaseClient()
+  const supabase = createServerSupabaseClient()
 
   const { error } = await supabase.auth.signUp({
     email,
@@ -42,13 +42,13 @@ export async function signup({ email, password }: LoginCredentials) {
 }
 
 export async function logout() {
-  const supabase = await createServerSupabaseClient()
+  const supabase = createServerSupabaseClient()
   await supabase.auth.signOut()
   redirect('/login')
 }
 
 export async function getUser() {
-  const supabase = await createServerSupabaseClient()
+  const supabase = createServerSupabaseClient()
   const { data: { user } } = await supabase.auth.getUser()
   return user
 }

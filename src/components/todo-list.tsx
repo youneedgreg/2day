@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { 
   Plus, Trash2, ListTodo, CheckCircle2, CircleSlash, Sparkles, 
@@ -75,6 +75,24 @@ export default function TodoList() {
   const [isSelectionMode, setIsSelectionMode] = useState(false)
   const [selectedTodos, setSelectedTodos] = useState<string[]>([])
 
+  const fetchTodos = useCallback(async () => {
+    if (!user) return
+    try {
+      const data = await getTodos(user.id)
+      // Convert database todos to local type
+      const convertedTodos: TodoWithRelations[] = data.map(todo => ({
+        ...todo,
+        priority: todo.priority || 'medium' // Convert null to 'medium'
+      }))
+      setTodos(convertedTodos)
+    } catch (error) {
+      console.error('Error fetching todos:', error)
+      toast.error('Failed to load todos')
+    } finally {
+      setLoading(false)
+    }
+  }, [user])
+
   useEffect(() => {
     if (!user) return
 
@@ -91,25 +109,7 @@ export default function TodoList() {
     return () => {
       subscription.unsubscribe()
     }
-  }, [user])
-
-  const fetchTodos = async () => {
-    if (!user) return
-    try {
-      const data = await getTodos(user.id)
-      // Convert database todos to local type
-      const convertedTodos: TodoWithRelations[] = data.map(todo => ({
-        ...todo,
-        priority: todo.priority || 'medium' // Convert null to 'medium'
-      }))
-      setTodos(convertedTodos)
-    } catch (error) {
-      console.error('Error fetching todos:', error)
-      toast.error('Failed to load todos')
-    } finally {
-      setLoading(false)
-    }
-  }
+  }, [user, fetchTodos])
 
   // Initialize active timers from todos
   useEffect(() => {
@@ -164,7 +164,7 @@ export default function TodoList() {
     }, 1000)
 
     return () => clearInterval(interval)
-  }, [activeTimers])
+  }, [activeTimers, handleTimerComplete, todos])
 
   const handleCreateTodo = async () => {
     if (!user || !newTodo.trim()) return
@@ -368,7 +368,7 @@ export default function TodoList() {
     }
   }
 
-  const handleTimerComplete = (todoId: string, todoTitle: string) => {
+  const handleTimerComplete = useCallback((todoId: string, todoTitle: string) => {
     setTodos(prev => prev.map(t => 
       t.id === todoId && t.timer
         ? { 
@@ -393,7 +393,7 @@ export default function TodoList() {
         icon: "/favicon.ico"
       })
     }
-  }
+  }, [activeTimerId])
 
   const findTodoById = (id: string): TodoWithRelations | null => {
     return todos.find(t => t.id === id) || null

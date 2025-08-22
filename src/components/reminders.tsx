@@ -28,8 +28,8 @@ import { Textarea } from "@/components/ui/textarea"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { useAuth } from '@/hooks/useAuth'
 import { 
-  getReminders, 
-  createReminder, 
+   
+   
   updateReminder, 
   deleteReminder,
   subscribeToReminders,
@@ -61,7 +61,7 @@ dayjs.extend(customParseFormat)
 type Priority = 'low' | 'medium' | 'high'
 type RepeatFrequency = "none" | "daily" | "weekly" | "monthly"
 type Reminder = Database['public']['Tables']['reminders']['Row']
-type ReminderMetadata = Database['public']['Tables']['reminders']['Row']['reminder_metadata']
+
 type FilterType = 'all' | 'high-priority' | 'today' | 'this-week' | 'overdue' | 'completed' | 'recurring'
 type ViewMode = 'card' | 'list' | 'compact'
 
