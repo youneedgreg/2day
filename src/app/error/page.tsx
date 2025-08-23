@@ -1,9 +1,8 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, Suspense } from "react"
 import { motion } from "framer-motion"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -24,14 +23,10 @@ import {
 } from "lucide-react"
 import { toast } from 'sonner'
 
-// Next.js error page props (for error.tsx files)
-interface ErrorProps {
-  error: Error & { digest?: string };
-  reset: () => void;
-}
-
-export default function Error({ error, reset }: ErrorProps) {
+function ErrorContent() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const errorMessage = searchParams.get('message')
   const [isRetrying, setIsRetrying] = useState(false)
   const [mounted, setMounted] = useState(false)
   const [copied, setCopied] = useState(false)
@@ -40,9 +35,9 @@ export default function Error({ error, reset }: ErrorProps) {
     setMounted(true)
   }, [])
 
-  // Get error details based on error message
   const getErrorDetails = () => {
-    if (error?.message?.includes('Network')) {
+    const message = errorMessage
+    if (message?.includes('Network')) {
       return {
         title: "Network Error",
         description: "Please check your internet connection and try again.",
@@ -52,7 +47,7 @@ export default function Error({ error, reset }: ErrorProps) {
     }
     return {
       title: "Something Went Wrong",
-      description: "An unexpected error occurred. Please try again or contact support if the problem persists.",
+      description: message || "An unexpected error occurred. Please try again or contact support if the problem persists.",
       icon: AlertTriangle,
       color: "orange"
     }
@@ -65,12 +60,7 @@ export default function Error({ error, reset }: ErrorProps) {
     setIsRetrying(true)
     
     try {
-      if (reset) {
-        reset()
-      } else {
-        // Reload the page
-        window.location.reload()
-      }
+      window.location.reload()
     } catch (err) {
       toast.error('Failed to retry. Please try again.')
     }
@@ -94,8 +84,7 @@ export default function Error({ error, reset }: ErrorProps) {
     const errorInfo = {
       timestamp: new Date().toISOString(),
       statusCode: 500,
-      message: error?.message || errorDetails.description,
-      digest: error?.digest,
+      message: errorDetails.description,
       url: window.location.href,
       userAgent: navigator.userAgent
     }
@@ -279,7 +268,7 @@ export default function Error({ error, reset }: ErrorProps) {
                 </Button>
 
                 {/* Error Details Section */}
-                {(error?.message || error?.digest) && (
+                {(errorMessage) && (
                   <motion.div
                     initial={{ height: 0, opacity: 0 }}
                     animate={{ height: "auto", opacity: 1 }}
@@ -306,15 +295,9 @@ export default function Error({ error, reset }: ErrorProps) {
                         transition={{ delay: 0.2 }}
                         className="mt-3 space-y-2"
                       >
-                        {error?.message && (
+                        {errorMessage && (
                           <div className="text-xs bg-slate-100 dark:bg-slate-800 p-3 rounded font-mono break-all">
-                            {error.message}
-                          </div>
-                        )}
-                        
-                        {error?.digest && (
-                          <div className="text-xs text-slate-500 dark:text-slate-400">
-                            Error ID: {error.digest}
+                            {errorMessage}
                           </div>
                         )}
                         
@@ -396,5 +379,10 @@ export default function Error({ error, reset }: ErrorProps) {
   )
 }
 
-// Export specifically for Next.js error boundaries (error.tsx files)
-export { Error as Error }
+export default function ErrorPage() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <ErrorContent />
+    </Suspense>
+  )
+}
