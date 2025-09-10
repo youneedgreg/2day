@@ -20,6 +20,8 @@ export const metadata: Metadata = {
   description: "Your all in one productivity app.",
 };
 
+import { AuthProvider } from "@/contexts/AuthContext";
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -30,10 +32,12 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <CustomToastProvider>
-        {children}
-        <Toaster position="top-right" />
-        </CustomToastProvider>
+        <AuthProvider>
+          <CustomToastProvider>
+          {children}
+          <Toaster position="top-right" />
+          </CustomToastProvider>
+        </AuthProvider>
         <Analytics />
       </body>
     </html>

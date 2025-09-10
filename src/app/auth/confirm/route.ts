@@ -31,5 +31,6 @@ export async function GET(request: NextRequest) {
 
   // return the user to an error page with some instructions
   redirectTo.pathname = '/error'
+  redirectTo.searchParams.set('message', error?.message || 'An unexpected error occurred.')
   return NextResponse.redirect(redirectTo)
 }
